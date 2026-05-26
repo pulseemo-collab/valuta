@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "Valuta",
+    "slug": "valuta",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "valuta",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#060B18"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "al.valuta.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Valuta ka nevojë për kamerën për të skanuar faturat.",
+        "NSPhotoLibraryUsageDescription": "Valuta ka nevojë për galerinë për të ngarkuar faturat."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#060B18"
+      },
+      "package": "al.valuta.app",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png",
+      "name": "Valuta",
+      "shortName": "Valuta",
+      "description": "Menaxho financat tua personale dhe të biznesit. Gjurmo shpenzimet, buxhetin dhe qëllimet financiare.",
+      "themeColor": "#10B981",
+      "backgroundColor": "#060B18",
+      "lang": "sq"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-system-ui",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Valuta ka nevojë për galerinë për të ngarkuar faturat.",
+          "cameraPermission": "Valuta ka nevojë për kamerën për të skanuar faturat."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "74455abc-349b-4864-a7af-299a7ced9662"
+      }
+    }
+  }
+}
