@@ -5,17 +5,28 @@ import type { Database } from '@/types/supabase';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
-// Validate env vars at startup so misconfiguration is obvious immediately
+// ── Config status ─────────────────────────────────────────────────────────────
+// Exported so auth screens can detect and surface a specific "config missing"
+// message instead of a generic "Network request failed" error.
+export const supabaseConfigMissing = !supabaseUrl || !supabaseAnonKey;
+
+// ── Env var validation ────────────────────────────────────────────────────────
+
 if (!supabaseUrl) {
-  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL is missing. Check your .env file.');
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL is missing. Check your .env / EAS secrets.');
 } else if (!supabaseUrl.startsWith('https://')) {
   console.error('[Supabase] EXPO_PUBLIC_SUPABASE_URL looks malformed:', supabaseUrl);
+} else {
+  // Log partial URL on native so devs can confirm the var was baked into the bundle
+  // without exposing the full project ID in production logs.
+  const projectHint = supabaseUrl.replace('https://', '').split('.')[0].slice(0, 8) + '…';
+  console.log(`[Supabase] URL present — project hint: ${projectHint} (platform: ${Platform.OS})`);
 }
 
 if (!supabaseAnonKey) {
-  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY is missing. Check your .env file.');
-} else {
-  // Decode JWT payload to verify the ref matches the URL project ID
+  console.error('[Supabase] EXPO_PUBLIC_SUPABASE_ANON_KEY is missing. Check your .env / EAS secrets.');
+} else if (Platform.OS === 'web') {
+  // atob() is a browser API — skip JWT validation on native to avoid any runtime issues
   try {
     const payload = supabaseAnonKey.split('.')[1];
     const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
@@ -32,7 +43,12 @@ if (!supabaseAnonKey) {
   } catch {
     console.warn('[Supabase] Could not decode anon key JWT to verify project ID.');
   }
+} else {
+  // On native: confirm key is present without logging any part of it
+  console.log(`[Supabase] Anon key present — length: ${supabaseAnonKey.length} chars`);
 }
+
+// ── Auth storage adapter ──────────────────────────────────────────────────────
 
 // Returns the appropriate auth storage adapter:
 // - Native: AsyncStorage (loaded via require to avoid SSR module evaluation)
@@ -47,11 +63,31 @@ function getAuthStorage() {
   return window.localStorage;
 }
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: getAuthStorage(),
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+// ── Safe client creation ──────────────────────────────────────────────────────
+
+// createClient throws if supabaseUrl or supabaseAnonKey are empty strings.
+// On Android, a module-level throw kills the entire JS bundle → immediate crash.
+// We substitute offline placeholder values so the client is always constructable;
+// API calls will fail gracefully and store.tsx handles those errors.
+function createSafeClient() {
+  const url = supabaseUrl || 'https://offline-placeholder.supabase.co';
+  const key = supabaseAnonKey || 'offline-placeholder-key';
+  try {
+    return createClient<Database>(url, key, {
+      auth: {
+        storage: getAuthStorage(),
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });
+  } catch (err) {
+    console.error('[Supabase] createClient failed — falling back to offline mode:', err);
+    // Last resort: bare client with no storage (auth calls will fail gracefully)
+    return createClient<Database>(url, key, {
+      auth: { storage: undefined, autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+    });
+  }
+}
+
+export const supabase = createSafeClient();

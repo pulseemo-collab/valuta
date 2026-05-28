@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, Pressable, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Expense } from '@/types';
 import { getCategoryById } from '@/constants/categories';
 import { formatCurrency, formatTime } from '@/lib/utils';
-import { C } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
+import { getCategoryName } from '@/constants/categories';
 
 interface TransactionItemProps {
   expense: Expense;
@@ -15,7 +17,11 @@ interface TransactionItemProps {
 }
 
 export function TransactionItem({ expense, onPress, showDate = false, isRecurring = false }: TransactionItemProps) {
+  const C = useThemeColors();
+  const { lang } = useTranslation();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const category = getCategoryById(expense.category);
+  const categoryDisplayName = getCategoryName(expense.category, lang);
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -49,7 +55,6 @@ export function TransactionItem({ expense, onPress, showDate = false, isRecurrin
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        {/* Category color accent stripe */}
         <View style={[styles.accentBar, { backgroundColor: category.color }]} />
 
         <View style={[styles.iconWrap, { backgroundColor: category.bgColor, borderColor: category.color + '30' }]}>
@@ -58,12 +63,12 @@ export function TransactionItem({ expense, onPress, showDate = false, isRecurrin
 
         <View style={styles.details}>
           <Text style={styles.note} numberOfLines={1}>
-            {expense.note || category.name}
+            {expense.note || categoryDisplayName}
           </Text>
           <View style={styles.meta}>
             <View style={[styles.categoryPill, { backgroundColor: category.color + '16', borderColor: category.color + '28' }]}>
               <Text style={[styles.categoryLabel, { color: category.color }]}>
-                {category.name}
+                {categoryDisplayName}
               </Text>
             </View>
             {time !== '—' && (
@@ -77,7 +82,7 @@ export function TransactionItem({ expense, onPress, showDate = false, isRecurrin
                 <Text style={styles.metaDot}>·</Text>
                 <View style={styles.recurBadge}>
                   <Ionicons name="repeat-outline" size={9} color={C.accent} />
-                  <Text style={styles.recurBadgeText}>Periodike</Text>
+                  <Text style={styles.recurBadgeText}>{lang === 'en' ? 'Recurring' : 'Periodike'}</Text>
                 </View>
               </>
             )}
@@ -108,126 +113,128 @@ export function TransactionItem({ expense, onPress, showDate = false, isRecurrin
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 13,
-    paddingLeft: 14,
-    paddingRight: 14,
-    gap: 12,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  containerHovered: {
-    backgroundColor: C.elevated,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 12,
-    bottom: 12,
-    width: 3,
-    borderRadius: 2,
-    opacity: 0.7,
-  },
-  iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-    borderWidth: 1,
-  },
-  details: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  note: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.text,
-    letterSpacing: -0.15,
-  },
-  meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flexWrap: 'nowrap',
-  },
-  categoryPill: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  categoryLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  metaDot: {
-    fontSize: 11,
-    color: C.textFaint,
-    lineHeight: 14,
-  },
-  time: {
-    fontSize: 11,
-    color: C.textMuted,
-    fontWeight: '400',
-  },
-  right: {
-    alignItems: 'flex-end',
-    flexShrink: 0,
-    gap: 2,
-  },
-  amount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: C.danger,
-    letterSpacing: -0.5,
-  },
-  converted: {
-    fontSize: 10,
-    color: C.textMuted,
-    fontWeight: '400',
-  },
-  recurBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    backgroundColor: C.accentBgSubtle,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: C.accentBorder,
-  },
-  recurBadgeText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: C.accent,
-    letterSpacing: 0.3,
-  },
-  bizBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    backgroundColor: C.accentBgSubtle,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: C.accentBorder,
-  },
-  bizBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: C.accentLight,
-    letterSpacing: 0.5,
-  },
-});
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 13,
+      paddingLeft: 14,
+      paddingRight: 14,
+      gap: 12,
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    containerHovered: {
+      backgroundColor: C.elevated,
+    },
+    pressed: {
+      opacity: 0.8,
+    },
+    accentBar: {
+      position: 'absolute',
+      left: 0,
+      top: 12,
+      bottom: 12,
+      width: 3,
+      borderRadius: 2,
+      opacity: 0.7,
+    },
+    iconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexShrink: 0,
+      borderWidth: 1,
+    },
+    details: {
+      flex: 1,
+      gap: 4,
+      minWidth: 0,
+    },
+    note: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: C.text,
+      letterSpacing: -0.15,
+    },
+    meta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      flexWrap: 'nowrap',
+    },
+    categoryPill: {
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+    },
+    categoryLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    metaDot: {
+      fontSize: 11,
+      color: C.textFaint,
+      lineHeight: 14,
+    },
+    time: {
+      fontSize: 11,
+      color: C.textMuted,
+      fontWeight: '400',
+    },
+    right: {
+      alignItems: 'flex-end',
+      flexShrink: 0,
+      gap: 2,
+    },
+    amount: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: C.danger,
+      letterSpacing: -0.5,
+    },
+    converted: {
+      fontSize: 10,
+      color: C.textMuted,
+      fontWeight: '400',
+    },
+    recurBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      backgroundColor: C.accentBgSubtle,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: C.accentBorder,
+    },
+    recurBadgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: C.accent,
+      letterSpacing: 0.3,
+    },
+    bizBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      backgroundColor: C.accentBgSubtle,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: C.accentBorder,
+    },
+    bizBadgeText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: C.accentLight,
+      letterSpacing: 0.5,
+    },
+  });
+}

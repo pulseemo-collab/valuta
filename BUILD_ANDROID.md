@@ -93,27 +93,56 @@ npx expo start --dev-client
 
 ## 7. Environment Variables / Secrets
 
-The app reads Supabase credentials from environment variables prefixed with `EXPO_PUBLIC_`.
+The app reads Supabase credentials from two environment variables. These must be present at **build time** — Metro bundles them into the JS bundle when building the APK. They are NOT loaded at runtime from a file.
 
-For local development, create a `.env` file (not committed to git):
+### 7a. Local development (.env)
+
+Create `.env` in the project root (never commit this file):
 
 ```env
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
-For EAS cloud builds, set secrets via:
+Get the values from your Supabase dashboard → Project Settings → API.
+
+### 7b. EAS cloud builds (required for APK/AAB)
+
+EAS secrets are injected as environment variables during the cloud build. Without them the APK will have empty strings and Supabase will fail with "Network request failed".
+
+**Step 1 — Create the secrets (one-time setup)**
 
 ```sh
-eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "https://..."
-eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "eyJ..."
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "https://your-project-id.supabase.co"
+eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
-Verify secrets are set:
+> The secret names must match exactly (including the `EXPO_PUBLIC_` prefix and exact casing).
+
+**Step 2 — Verify secrets exist**
 
 ```sh
 eas secret:list
 ```
+
+Both `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` must appear in the output.
+
+**Step 3 — Rebuild**
+
+After adding secrets, you must trigger a new build — secrets are baked in at build time, not applied to existing APKs:
+
+```sh
+eas build --platform android --profile preview
+```
+
+### 7c. Diagnosing a missing-config build
+
+If the APK shows **"Konfigurimi i Supabase mungon në build-in Android."** on the login or register screen, or the Metro logs show `[Supabase] EXPO_PUBLIC_SUPABASE_URL is missing`, the secrets were not injected. Check:
+
+1. `eas secret:list` — both names must be present with scope `project`
+2. The secret names match exactly (no typos, no extra spaces)
+3. You triggered a **new build** after creating the secrets (old APKs cannot be patched)
+4. `eas.json` has the `env` section for the build profile you used (already set in this repo)
 
 ---
 

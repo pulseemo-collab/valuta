@@ -9,6 +9,13 @@ export function formatCurrency(amount: number, currency: Currency): string {
   return `${info.symbol}${amount.toFixed(2)}`;
 }
 
+export function formatInPreferred(amountALL: number, preferred: Currency): string {
+  if (preferred === 'ALL') return formatCurrency(Math.round(amountALL), 'ALL');
+  const info = getCurrencyInfo(preferred);
+  const converted = amountALL / info.toALL;
+  return formatCurrency(converted, preferred);
+}
+
 export function formatDate(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleDateString('sq-AL', {
@@ -101,9 +108,12 @@ export function getCategoryTotals(
 }
 
 export function getWeeklyData(
-  expenses: Expense[]
+  expenses: Expense[],
+  lang = 'sq'
 ): { label: string; value: number }[] {
-  const days = ['Die', 'Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht'];
+  const days = lang === 'en'
+    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    : ['Die', 'Hën', 'Mar', 'Mër', 'Enj', 'Pre', 'Sht'];
   const result = days.map((label, idx) => {
     const date = new Date();
     date.setDate(date.getDate() - (date.getDay() - idx));
@@ -117,9 +127,12 @@ export function getWeeklyData(
 }
 
 export function getMonthlyData(
-  expenses: Expense[]
+  expenses: Expense[],
+  lang = 'sq'
 ): { label: string; value: number }[] {
-  const months = ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Kor', 'Gus', 'Sht', 'Tet', 'Nën', 'Dhj'];
+  const months = lang === 'en'
+    ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    : ['Jan', 'Shk', 'Mar', 'Pri', 'Maj', 'Qer', 'Kor', 'Gus', 'Sht', 'Tet', 'Nën', 'Dhj'];
   const now = new Date();
   return Array.from({ length: 6 }, (_, i) => {
     const month = (now.getMonth() - 5 + i + 12) % 12;
@@ -166,8 +179,7 @@ export function getSubscriptionMonthlyTotal(
   return subscriptions
     .filter((s) => s.isActive)
     .reduce((sum, s) => {
-      const rate = s.currency === 'EUR' ? 108 : s.currency === 'USD' ? 100 : 1;
-      const inAll = s.amount * rate;
+      const inAll = convertToALL(s.amount, s.currency);
       if (s.frequency === 'weekly') return sum + inAll * 4.33;
       if (s.frequency === 'yearly') return sum + inAll / 12;
       return sum + inAll;
@@ -181,9 +193,8 @@ export function computeGoalProgress(goal: FinancialGoal): {
   savedALL: number;
   isComplete: boolean;
 } {
-  const rate = goal.currency === 'EUR' ? 108 : goal.currency === 'USD' ? 100 : 1;
-  const targetALL = goal.targetAmount * rate;
-  const savedALL = goal.savedAmount * rate;
+  const targetALL = convertToALL(goal.targetAmount, goal.currency);
+  const savedALL = convertToALL(goal.savedAmount, goal.currency);
   const pct = targetALL > 0 ? Math.min((savedALL / targetALL) * 100, 100) : 0;
   return {
     pct,
@@ -206,17 +217,21 @@ export function estimateGoalMonths(
 
 export function getGoalInsights(
   goals: FinancialGoal[],
-  monthlySavingsRate: number
+  monthlySavingsRate: number,
+  lang = 'sq'
 ): InsightMessage[] {
   const activeGoals = goals.filter((g) => !g.completedAt);
   if (activeGoals.length === 0) return [];
 
+  const en = lang === 'en';
   const insights: InsightMessage[] = [];
 
   if (activeGoals.length > 0) {
     insights.push({
       icon: 'flag-outline',
-      text: `Ke ${activeGoals.length} qëllim${activeGoals.length !== 1 ? 'e' : ''} financiar${activeGoals.length !== 1 ? 'e' : ''} aktiv${activeGoals.length !== 1 ? 'e' : ''}`,
+      text: en
+        ? `${activeGoals.length} active financial goal${activeGoals.length !== 1 ? 's' : ''}`
+        : `Ke ${activeGoals.length} qëllim${activeGoals.length !== 1 ? 'e' : ''} financiar${activeGoals.length !== 1 ? 'e' : ''} aktiv${activeGoals.length !== 1 ? 'e' : ''}`,
       type: 'info',
     });
   }
@@ -229,7 +244,9 @@ export function getGoalInsights(
   if (topPct > 0) {
     insights.push({
       icon: 'trophy-outline',
-      text: `'${top.title}' është ${topPct.toFixed(0)}% arritur`,
+      text: en
+        ? `'${top.title}' is ${topPct.toFixed(0)}% complete`
+        : `'${top.title}' është ${topPct.toFixed(0)}% arritur`,
       type: 'positive',
     });
   } else if (monthlySavingsRate > 0) {
@@ -237,7 +254,9 @@ export function getGoalInsights(
     if (months !== null && months > 0) {
       insights.push({
         icon: 'trophy-outline',
-        text: `'${top.title}': ~${months} muaj deri në arritje`,
+        text: en
+          ? `'${top.title}': ~${months} months to completion`
+          : `'${top.title}': ~${months} muaj deri në arritje`,
         type: 'neutral',
       });
     }
@@ -246,8 +265,13 @@ export function getGoalInsights(
   return insights.slice(0, 2);
 }
 
-export function getGreeting(): string {
+export function getGreeting(lang = 'sq'): string {
   const hour = new Date().getHours();
+  if (lang === 'en') {
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
   if (hour < 12) return 'Mirëmëngjes';
   if (hour < 17) return 'Mirëdita';
   return 'Mirëmbrëma';
@@ -335,10 +359,13 @@ const CATEGORY_NAMES_AL: Record<string, string> = {
 
 export function getInsights(
   expenses: Expense[],
-  budget: { monthly: number }
+  budget: { monthly: number },
+  preferred: Currency = 'ALL',
+  lang = 'sq'
 ): InsightMessage[] {
   if (expenses.length === 0) return [];
 
+  const en = lang === 'en';
   const insights: InsightMessage[] = [];
   const now = new Date();
   const daysElapsed = now.getDate();
@@ -359,19 +386,25 @@ export function getInsights(
     if (pct > 100) {
       insights.push({
         icon: 'alert-circle-outline',
-        text: `Ke tejkaluar buxhetin me ${formatCurrency(Math.round(thisMonthTotal - budget.monthly), 'ALL')}.`,
+        text: en
+          ? `Budget exceeded by ${formatInPreferred(Math.round(thisMonthTotal - budget.monthly), preferred)}.`
+          : `Ke tejkaluar buxhetin me ${formatInPreferred(Math.round(thisMonthTotal - budget.monthly), preferred)}.`,
         type: 'warning',
       });
     } else if (pct >= 80) {
       insights.push({
         icon: 'warning-outline',
-        text: `Je te ${pct.toFixed(0)}% e buxhetit — vetëm ${formatCurrency(Math.round(budget.monthly - thisMonthTotal), 'ALL')} mbeten.`,
+        text: en
+          ? `At ${pct.toFixed(0)}% of budget — only ${formatInPreferred(Math.round(budget.monthly - thisMonthTotal), preferred)} remaining.`
+          : `Je te ${pct.toFixed(0)}% e buxhetit — vetëm ${formatInPreferred(Math.round(budget.monthly - thisMonthTotal), preferred)} mbeten.`,
         type: 'warning',
       });
     } else if (pct < 50 && daysElapsed >= 15) {
       insights.push({
         icon: 'checkmark-circle-outline',
-        text: `Mirë! Ke shpenzuar vetëm ${pct.toFixed(0)}% të buxhetit në gjysmën e muajit.`,
+        text: en
+          ? `Great! Only ${pct.toFixed(0)}% of budget spent at mid-month.`
+          : `Mirë! Ke shpenzuar vetëm ${pct.toFixed(0)}% të buxhetit në gjysmën e muajit.`,
         type: 'positive',
       });
     }
@@ -385,8 +418,8 @@ export function getInsights(
       insights.push({
         icon: up ? 'trending-up-outline' : 'trending-down-outline',
         text: up
-          ? `Shpenzimet u rritën me ${pct.toFixed(0)}% krahasuar me muajin e kaluar.`
-          : `Shpenzimet u ulën me ${Math.abs(pct).toFixed(0)}% krahasuar me muajin e kaluar.`,
+          ? (en ? `Spending up ${pct.toFixed(0)}% vs last month.` : `Shpenzimet u rritën me ${pct.toFixed(0)}% krahasuar me muajin e kaluar.`)
+          : (en ? `Spending down ${Math.abs(pct).toFixed(0)}% vs last month.` : `Shpenzimet u ulën me ${Math.abs(pct).toFixed(0)}% krahasuar me muajin e kaluar.`),
         type: up ? 'warning' : 'positive',
       });
     }
@@ -394,10 +427,14 @@ export function getInsights(
 
   // 3. Top category this month
   if (topCat && thisMonthCount >= 3) {
-    const catName = CATEGORY_NAMES_AL[topCat.category] ?? topCat.category;
+    const catNameSq = CATEGORY_NAMES_AL[topCat.category] ?? topCat.category;
+    const catNameEn = { ushqim: 'Food', transport: 'Transport', faturat: 'Bills', shopping: 'Shopping', shendet: 'Health', argetime: 'Entertainment', biznes: 'Business', tjera: 'Other' }[topCat.category] ?? topCat.category;
+    const catName = en ? catNameEn : catNameSq;
     insights.push({
       icon: 'grid-outline',
-      text: `${catName} është kategoria kryesore me ${topCat.percent.toFixed(0)}% të shpenzimeve të muajit.`,
+      text: en
+        ? `${catName} is the top category at ${topCat.percent.toFixed(0)}% of this month's spending.`
+        : `${catName} është kategoria kryesore me ${topCat.percent.toFixed(0)}% të shpenzimeve të muajit.`,
       type: 'neutral',
     });
   }
@@ -410,8 +447,8 @@ export function getInsights(
       insights.push({
         icon: up ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline',
         text: up
-          ? `Kjo javë ke shpenzuar ${pct.toFixed(0)}% më shumë se java e kaluar.`
-          : `Kjo javë ke shpenzuar ${Math.abs(pct).toFixed(0)}% më pak se java e kaluar.`,
+          ? (en ? `This week you spent ${pct.toFixed(0)}% more than last week.` : `Kjo javë ke shpenzuar ${pct.toFixed(0)}% më shumë se java e kaluar.`)
+          : (en ? `This week you spent ${Math.abs(pct).toFixed(0)}% less than last week.` : `Kjo javë ke shpenzuar ${Math.abs(pct).toFixed(0)}% më pak se java e kaluar.`),
         type: up ? 'warning' : 'positive',
       });
     }
@@ -422,7 +459,9 @@ export function getInsights(
     const avgDaily = thisMonthTotal / daysElapsed;
     insights.push({
       icon: 'analytics-outline',
-      text: `Mesatarja ditore është ${formatCurrency(Math.round(avgDaily), 'ALL')}/ditë këtë muaj.`,
+      text: en
+        ? `Daily average is ${formatInPreferred(Math.round(avgDaily), preferred)}/day this month.`
+        : `Mesatarja ditore është ${formatInPreferred(Math.round(avgDaily), preferred)}/ditë këtë muaj.`,
       type: 'info',
     });
   }
@@ -431,7 +470,9 @@ export function getInsights(
   if (todayTotal > 0 && thisMonthTotal > 0 && (todayTotal / thisMonthTotal) >= 0.2) {
     insights.push({
       icon: 'today-outline',
-      text: `Sot ke shpenzuar ${formatCurrency(Math.round(todayTotal), 'ALL')} — ${((todayTotal / thisMonthTotal) * 100).toFixed(0)}% e totalit të muajit.`,
+      text: en
+        ? `Today you spent ${formatInPreferred(Math.round(todayTotal), preferred)} — ${((todayTotal / thisMonthTotal) * 100).toFixed(0)}% of the monthly total.`
+        : `Sot ke shpenzuar ${formatInPreferred(Math.round(todayTotal), preferred)} — ${((todayTotal / thisMonthTotal) * 100).toFixed(0)}% e totalit të muajit.`,
       type: 'info',
     });
   }
@@ -445,7 +486,9 @@ export function getInsights(
     if (projPct >= 110 && currentPct < 80) {
       insights.push({
         icon: 'calculator-outline',
-        text: `Me ritmin aktual, parashikohen ${formatCurrency(Math.round(projected), 'ALL')} këtë muaj — ${projPct.toFixed(0)}% e buxhetit.`,
+        text: en
+          ? `At this pace, projected spend is ${formatInPreferred(Math.round(projected), preferred)} — ${projPct.toFixed(0)}% of budget.`
+          : `Me ritmin aktual, parashikohen ${formatInPreferred(Math.round(projected), preferred)} këtë muaj — ${projPct.toFixed(0)}% e buxhetit.`,
         type: 'warning',
       });
     }

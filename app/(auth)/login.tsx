@@ -16,13 +16,20 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { C, GRADIENTS } from '@/constants/colors';
 import { signIn, toAlbanianError } from '@/lib/auth';
+import { supabaseConfigMissing } from '@/lib/supabase';
+import { useTranslation } from '@/lib/i18n';
 
 export default function Login() {
+  const { t, lang } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    () => supabaseConfigMissing && Platform.OS !== 'web'
+      ? 'Konfigurimi i Supabase mungon në build-in Android.'
+      : ''
+  );
   const router = useRouter();
 
   const handleLogin = async () => {
@@ -73,16 +80,16 @@ export default function Login() {
                   >
                     <Text style={styles.logoLetter}>V</Text>
                   </LinearGradient>
-                  <Text style={styles.title}>Mirë se vjen</Text>
-                  <Text style={styles.subtitle}>Hyr në llogarinë tënde Valuta</Text>
+                  <Text style={styles.title}>{t('authWelcome')}</Text>
+                  <Text style={styles.subtitle}>{t('authWelcomeSub')}</Text>
                 </View>
 
                 <View style={styles.form}>
                   <Input
-                    label="Email"
+                    label={t('authEmail')}
                     placeholder="emri@shembull.al"
                     value={email}
-                    onChangeText={(t) => { setEmail(t); setError(''); }}
+                    onChangeText={(v) => { setEmail(v); setError(''); }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -90,10 +97,10 @@ export default function Login() {
                   />
 
                   <Input
-                    label="Fjalëkalimi"
+                    label={t('authPassword')}
                     placeholder="••••••••"
                     value={password}
-                    onChangeText={(t) => { setPassword(t); setError(''); }}
+                    onChangeText={(v) => { setPassword(v); setError(''); }}
                     secureTextEntry={!showPass}
                     leftIcon={<Ionicons name="lock-closed-outline" size={18} color={C.textMuted} />}
                     rightIcon={
@@ -114,33 +121,33 @@ export default function Login() {
                   ) : null}
 
                   <TouchableOpacity style={styles.forgotBtn}>
-                    <Text style={styles.forgotText}>Harrove fjalëkalimin?</Text>
+                    <Text style={styles.forgotText}>{t('authForgotPwQ')}</Text>
                   </TouchableOpacity>
 
                   <Button onPress={handleLogin} size="lg" fullWidth loading={loading}>
-                    Hyr
+                    {t('authLoginBtn')}
                   </Button>
 
                   <View style={styles.divider}>
                     <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>ose</Text>
+                    <Text style={styles.dividerText}>{lang === 'en' ? 'or' : 'ose'}</Text>
                     <View style={styles.dividerLine} />
                   </View>
 
                   <TouchableOpacity style={[styles.socialBtn, styles.socialBtnDisabled]} activeOpacity={1} disabled>
                     <Ionicons name="logo-google" size={20} color={C.textFaint} />
-                    <Text style={[styles.socialText, { color: C.textFaint }]}>Vazhdo me Google</Text>
+                    <Text style={[styles.socialText, { color: C.textFaint }]}>{t('authContinueGoogle')}</Text>
                     <View style={styles.soonBadge}>
-                      <Text style={styles.soonBadgeText}>SE SHPEJTI</Text>
+                      <Text style={styles.soonBadgeText}>{lang === 'en' ? 'SOON' : 'SE SHPEJTI'}</Text>
                     </View>
                   </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.registerRow}>
-                <Text style={styles.registerText}>Nuk ke llogari? </Text>
+                <Text style={styles.registerText}>{t('authNoAccount').split('?')[0]}? </Text>
                 <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-                  <Text style={styles.registerLink}>Regjistrohu</Text>
+                  <Text style={styles.registerLink}>{t('authRegisterBtn')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

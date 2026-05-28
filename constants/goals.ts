@@ -9,6 +9,22 @@ export interface GoalPreset {
   currency: Currency;
 }
 
+const GOAL_TITLES_EN: Record<string, string> = {
+  'Telefon i ri': 'New Phone',
+  'Pushime': 'Vacation',
+  'Fond emergjence': 'Emergency Fund',
+  'Makinë': 'Car',
+  'Investim biznesi': 'Business Investment',
+  'Banesë': 'Home',
+  'Arsimim': 'Education',
+  'Pajisje': 'Equipment',
+};
+
+export function getGoalPresetTitle(title: string, lang: string): string {
+  if (lang === 'en') return GOAL_TITLES_EN[title] ?? title;
+  return title;
+}
+
 export const GOAL_PRESETS: GoalPreset[] = [
   {
     title: 'Telefon i ri',

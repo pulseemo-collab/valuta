@@ -18,39 +18,45 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SyncingBanner } from '@/components/ui/SyncingBanner';
 import { CardSkeleton } from '@/components/ui/SkeletonLoader';
-import { CATEGORIES } from '@/constants/categories';
+import { CATEGORIES, getCategoryName } from '@/constants/categories';
 import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
-import { formatCurrency, getMonthTotal, getTotalALL } from '@/lib/utils';
+import { formatInPreferred, getMonthTotal, getTotalALL } from '@/lib/utils';
 import { getBudgetAdvisory, type RiskLevel } from '@/lib/budgetAdvisor';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, useIsLight, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 
 function riskColor(level: RiskLevel): string {
-  if (level === 'danger') return C.danger;
-  if (level === 'caution') return C.warning;
-  return C.primary;
+  if (level === 'danger') return '#DC2626';
+  if (level === 'caution') return '#D97706';
+  return '#10B981';
 }
 
 function riskBg(level: RiskLevel): string {
-  if (level === 'danger') return C.dangerBgSubtle;
-  if (level === 'caution') return C.warningBgSubtle;
-  return C.primaryBgSubtle;
+  if (level === 'danger') return 'rgba(220,38,38,0.07)';
+  if (level === 'caution') return 'rgba(217,119,6,0.07)';
+  return 'rgba(16,185,129,0.07)';
 }
 
 function riskBorder(level: RiskLevel): string {
-  if (level === 'danger') return C.dangerBorder;
-  if (level === 'caution') return C.warningBorder;
-  return C.primaryBorder;
+  if (level === 'danger') return 'rgba(220,38,38,0.26)';
+  if (level === 'caution') return 'rgba(217,119,6,0.26)';
+  return 'rgba(16,185,129,0.30)';
 }
 
-function riskLabel(level: RiskLevel): string {
-  if (level === 'danger') return 'Rrezik';
-  if (level === 'caution') return 'Kujdes';
-  return 'I sigurtë';
+function riskLabel(level: RiskLevel, t: (k: import('@/lib/i18n').TKey) => string): string {
+  if (level === 'danger') return t('budRiskDanger');
+  if (level === 'caution') return t('budRiskCaution');
+  return t('budRiskSafe');
 }
 
 export default function Buxheti() {
   const { state, setBudget } = useStore();
   const router = useRouter();
+  const C = useThemeColors();
+  const isLight = useIsLight();
+  const { t, lang } = useTranslation();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const [editMode, setEditMode] = useState(false);
   const [newBudget, setNewBudget] = useState(state.budget.monthly.toString());
   const [saving, setSaving] = useState(false);
@@ -73,8 +79,8 @@ export default function Buxheti() {
   }, [state.expenses, bizExpenses, isBizMode]);
 
   const advisory = useMemo(
-    () => getBudgetAdvisory(isBizMode ? bizExpenses : state.expenses, state.budget),
-    [state.expenses, bizExpenses, state.budget, isBizMode]
+    () => getBudgetAdvisory(isBizMode ? bizExpenses : state.expenses, state.budget, state.preferredCurrency),
+    [state.expenses, bizExpenses, state.budget, isBizMode, state.preferredCurrency]
   );
 
   const totalSpent = isBizMode ? getMonthTotal(bizExpenses) : getMonthTotal(state.expenses);
@@ -102,7 +108,7 @@ export default function Buxheti() {
   const handleSave = () => {
     const val = parseFloat(newBudget.replace(',', '.'));
     if (isNaN(val) || val <= 0) {
-      Alert.alert('Gabim', 'Vendos një buxhet të vlefshëm.');
+      Alert.alert(t('error'), t('budInvalidBudget'));
       return;
     }
     setSaving(true);
@@ -119,10 +125,18 @@ export default function Buxheti() {
     ? [C.warning, '#D97706']
     : GRADIENTS.primaryShine;
 
+  const mainCardGradient = overBudget
+    ? ['rgba(239,68,68,0.14)', isLight ? '#FFF5F5' : '#0a0a14']
+    : overWarning
+    ? ['rgba(245,158,11,0.12)', isLight ? '#FFFBF0' : '#060B18']
+    : isLight
+    ? ['rgba(16,185,129,0.08)', '#FFFFFF', '#F8FAFC']
+    : ['#0c2918', '#081524', '#060B18'];
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <Text style={styles.pageTitle}>{isBizMode ? 'Buxheti Biznesi' : 'Buxheti'}</Text>
+        <Text style={styles.pageTitle}>{isBizMode ? t('budBizTitle') : t('budTitle')}</Text>
 
         <SyncingBanner />
 
@@ -154,16 +168,14 @@ export default function Buxheti() {
               </LinearGradient>
             </View>
             <View style={styles.setBudgetText}>
-              <Text style={styles.setBudgetTitle}>Vendos buxhetin tënd mujor</Text>
-              <Text style={styles.setBudgetSub}>
-                Cakto një limit shpenzimesh dhe Valuta{'\n'}do të gjurmojë çdo lekë automatikisht.
-              </Text>
+              <Text style={styles.setBudgetTitle}>{t('budSetTitle')}</Text>
+              <Text style={styles.setBudgetSub}>{t('budSetSubText')}</Text>
             </View>
             <View style={styles.setBudgetFeatures}>
               {([
-                { icon: 'trending-up-outline', text: 'Gjurmo progresin çdo ditë' },
-                { icon: 'alert-circle-outline', text: 'Sinjalizim kur afrohet limiti' },
-                { icon: 'analytics-outline', text: 'Analiza financiare mujore' },
+                { icon: 'trending-up-outline', text: t('budSetFeature1') },
+                { icon: 'alert-circle-outline', text: t('budSetFeature2') },
+                { icon: 'analytics-outline', text: t('budSetFeature3') },
               ] as const).map((f) => (
                 <View key={f.icon} style={styles.setBudgetFeatureRow}>
                   <View style={styles.setBudgetFeatureIcon}>
@@ -177,7 +189,7 @@ export default function Buxheti() {
               <View style={styles.setBudgetSuggChip}>
                 <Ionicons name="sparkles-outline" size={12} color={C.accentLight} />
                 <Text style={styles.setBudgetSuggText}>
-                  Rekomandohet: {formatCurrency(advisory.suggestion.amount, 'ALL')}
+                  {t('budRecommendedChip')}{formatInPreferred(advisory.suggestion.amount, state.preferredCurrency)}
                 </Text>
                 <TouchableOpacity
                   onPress={() => {
@@ -186,7 +198,7 @@ export default function Buxheti() {
                   }}
                   hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                 >
-                  <Text style={styles.setBudgetSuggApply}>Vendos →</Text>
+                  <Text style={styles.setBudgetSuggApply}>{t('budApplyChip')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -203,7 +215,7 @@ export default function Buxheti() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="wallet-outline" size={16} color={C.white} />
-                <Text style={styles.setBudgetBtnText}>Cakto buxhetin tani</Text>
+                <Text style={styles.setBudgetBtnText}>{t('budSetBtn')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -211,13 +223,7 @@ export default function Buxheti() {
 
         {/* Main Budget Card — only shown when a budget has been set */}
         {(!state.syncing || state.expenses.length > 0) && hasBudget && <LinearGradient
-          colors={
-            overBudget
-              ? ['rgba(239,68,68,0.14)', '#0a0a14']
-              : overWarning
-              ? ['rgba(245,158,11,0.12)', '#060B18']
-              : ['#0c2918', '#081524', '#060B18']
-          }
+          colors={mainCardGradient as string[]}
           style={styles.mainCard}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -233,12 +239,12 @@ export default function Buxheti() {
             {/* Budget amount row */}
             <View style={styles.budgetRow}>
               <View style={{ gap: 4 }}>
-                <Text style={styles.budgetLabel}>{isBizMode ? 'Buxheti i Biznesit' : 'Buxheti Mujor'}</Text>
-                <Text style={styles.budgetAmount}>{formatCurrency(state.budget.monthly, 'ALL')}</Text>
+                <Text style={styles.budgetLabel}>{isBizMode ? t('budBizMonthly') : t('budMonthly')}</Text>
+                <Text style={styles.budgetAmount}>{formatInPreferred(state.budget.monthly, state.preferredCurrency)}</Text>
               </View>
               <TouchableOpacity onPress={() => setEditMode(true)} style={styles.editBtn} activeOpacity={0.78}>
                 <Ionicons name="pencil" size={12} color={C.textSub} />
-                <Text style={styles.editBtnText}>Ndrysho</Text>
+                <Text style={styles.editBtnText}>{t('budEdit')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -262,20 +268,20 @@ export default function Buxheti() {
             {/* Stats */}
             <View style={styles.statsGrid}>
               <View style={styles.statBox}>
-                <Text style={styles.statValue}>{formatCurrency(totalSpent, 'ALL')}</Text>
-                <Text style={styles.statLabel}>Shpenzuar</Text>
+                <Text style={styles.statValue}>{formatInPreferred(totalSpent, state.preferredCurrency)}</Text>
+                <Text style={styles.statLabel}>{t('budSpent')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text style={[styles.statValue, { color: overBudget ? C.danger : C.primary }]}>
-                  {overBudget ? '−' : ''}{formatCurrency(Math.abs(remaining), 'ALL')}
+                  {overBudget ? '−' : ''}{formatInPreferred(Math.abs(remaining), state.preferredCurrency)}
                 </Text>
-                <Text style={styles.statLabel}>{overBudget ? 'Tejkalim' : 'Mbetur'}</Text>
+                <Text style={styles.statLabel}>{overBudget ? t('budExceeded') : t('budRemaining')}</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statBox}>
                 <Text style={styles.statValue}>{monthExpenses.length}</Text>
-                <Text style={styles.statLabel}>Transaksione</Text>
+                <Text style={styles.statLabel}>{t('budTransactions')}</Text>
               </View>
             </View>
 
@@ -287,8 +293,8 @@ export default function Buxheti() {
                 <Ionicons name="warning" size={14} color={overBudget ? C.danger : C.warning} />
                 <Text style={[styles.alertText, { color: overBudget ? C.danger : C.warning }]}>
                   {overBudget
-                    ? `Ke tejkaluar buxhetin me ${formatCurrency(Math.abs(remaining), 'ALL')}`
-                    : `Ke shpenzuar ${pct.toFixed(0)}% të buxhetit muajor`}
+                    ? `${t('budExceeded')}: +${formatInPreferred(Math.abs(remaining), state.preferredCurrency)}`
+                    : `${t('budSpent')} ${pct.toFixed(0)}% ${t('budOf')} ${t('budMonthly').toLowerCase()}`}
                 </Text>
               </View>
             )}
@@ -321,12 +327,12 @@ export default function Buxheti() {
                 <View style={[styles.fcIcon, { backgroundColor: riskBg(advisory.forecast.riskLevel) }]}>
                   <Ionicons name="stats-chart-outline" size={14} color={riskColor(advisory.forecast.riskLevel)} />
                 </View>
-                <Text style={styles.fcTitle}>Parashikim Mujor</Text>
+                <Text style={styles.fcTitle}>{t('budForecast')}</Text>
               </View>
               <View style={[styles.fcRiskBadge, { backgroundColor: riskBg(advisory.forecast.riskLevel), borderColor: riskBorder(advisory.forecast.riskLevel) }]}>
                 <View style={[styles.fcRiskDot, { backgroundColor: riskColor(advisory.forecast.riskLevel) }]} />
                 <Text style={[styles.fcRiskText, { color: riskColor(advisory.forecast.riskLevel) }]}>
-                  {riskLabel(advisory.forecast.riskLevel)}
+                  {riskLabel(advisory.forecast.riskLevel, t)}
                 </Text>
               </View>
             </View>
@@ -364,7 +370,7 @@ export default function Buxheti() {
             <View style={styles.fcBarLabels}>
               <Text style={styles.fcBarLabelLeft}>0</Text>
               <Text style={[styles.fcBarLabelRight, { color: riskColor(advisory.forecast.riskLevel) }]}>
-                Parashikim: {formatCurrency(Math.round(advisory.forecast.projectedMonthly), 'ALL')}
+                {t('budForecastLabel')}: {formatInPreferred(Math.round(advisory.forecast.projectedMonthly), state.preferredCurrency)}
               </Text>
             </View>
 
@@ -372,9 +378,9 @@ export default function Buxheti() {
             <View style={styles.fcMetrics}>
               <View style={styles.fcMetric}>
                 <Text style={styles.fcMetricValue}>
-                  {formatCurrency(Math.round(advisory.forecast.burnRate), 'ALL')}
+                  {formatInPreferred(Math.round(advisory.forecast.burnRate), state.preferredCurrency)}
                 </Text>
-                <Text style={styles.fcMetricLabel}>Ritmi/ditë</Text>
+                <Text style={styles.fcMetricLabel}>{t('budBurnRate')}</Text>
               </View>
               <View style={styles.fcMetricDivider} />
               <View style={styles.fcMetric}>
@@ -385,15 +391,15 @@ export default function Buxheti() {
                   ]}
                 >
                   {advisory.forecast.safeDaily > 0
-                    ? formatCurrency(Math.round(advisory.forecast.safeDaily), 'ALL')
+                    ? formatInPreferred(Math.round(advisory.forecast.safeDaily), state.preferredCurrency)
                     : '—'}
                 </Text>
-                <Text style={styles.fcMetricLabel}>Limit i sigurtë/ditë</Text>
+                <Text style={styles.fcMetricLabel}>{t('budSafeDailyLimit')}</Text>
               </View>
               <View style={styles.fcMetricDivider} />
               <View style={styles.fcMetric}>
                 <Text style={styles.fcMetricValue}>{advisory.forecast.daysRemaining}</Text>
-                <Text style={styles.fcMetricLabel}>Ditë mbeten</Text>
+                <Text style={styles.fcMetricLabel}>{t('budDaysRemaining')}</Text>
               </View>
             </View>
 
@@ -422,8 +428,8 @@ export default function Buxheti() {
                   ]}
                 >
                   {advisory.forecast.projectedOverrun > 0
-                    ? `Tejkalim i parashikuar: +${formatCurrency(Math.round(advisory.forecast.projectedOverrun), 'ALL')}`
-                    : `Kursim i parashikuar: ${formatCurrency(Math.round(-advisory.forecast.projectedOverrun), 'ALL')}`}
+                    ? `${t('budExceeded')} (+${formatInPreferred(Math.round(advisory.forecast.projectedOverrun), state.preferredCurrency)})`
+                    : `${t('budRemaining')}: ${formatInPreferred(Math.round(-advisory.forecast.projectedOverrun), state.preferredCurrency)}`}
                 </Text>
               </View>
             )}
@@ -442,7 +448,7 @@ export default function Buxheti() {
             <View style={styles.suggHeader}>
               <View style={styles.suggBadge}>
                 <Ionicons name="sparkles-outline" size={11} color={C.accentLight} />
-                <Text style={styles.suggBadgeText}>REKOMANDIM</Text>
+                <Text style={styles.suggBadgeText}>{t('budRecomBadge')}</Text>
               </View>
               <View style={styles.suggConfWrap}>
                 <View
@@ -460,18 +466,18 @@ export default function Buxheti() {
                 />
                 <Text style={styles.suggConfText}>
                   {advisory.suggestion.confidence === 'high'
-                    ? 'Saktësi e lartë'
+                    ? t('budSuggConfHigh')
                     : advisory.suggestion.confidence === 'medium'
-                    ? 'Saktësi mesatare'
-                    : 'Saktësi e ulët'}
+                    ? t('budSuggConfMedium')
+                    : t('budSuggConfLow')}
                 </Text>
               </View>
             </View>
             <View style={styles.suggBody}>
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.suggLabel}>Buxhet i sugjeruar</Text>
+                <Text style={styles.suggLabel}>{t('budSuggestedBudget')}</Text>
                 <Text style={styles.suggAmount}>
-                  {formatCurrency(advisory.suggestion.amount, 'ALL')}
+                  {formatInPreferred(advisory.suggestion.amount, state.preferredCurrency)}
                 </Text>
                 <Text style={styles.suggBasis}>{advisory.suggestion.basis}</Text>
               </View>
@@ -483,7 +489,7 @@ export default function Buxheti() {
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.suggApplyText}>Apliko</Text>
+                <Text style={styles.suggApplyText}>{t('budApplyBtn')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -536,12 +542,10 @@ export default function Buxheti() {
               <Ionicons name={isBizMode ? 'briefcase-outline' : 'calendar-outline'} size={24} color={isBizMode ? C.accentLight : C.primary} />
             </LinearGradient>
             <Text style={styles.emptyMonthTitle}>
-              {isBizMode ? 'Asnjë shpenzim biznesi këtë muaj' : 'Asnjë shpenzim këtë muaj'}
+              {isBizMode ? t('budNoBizExpenses') : t('budEmptyMonth')}
             </Text>
             <Text style={styles.emptyMonthSub}>
-              {isBizMode
-                ? 'Shto shpenzimin e parë të biznesit\npër të gjurmuar buxhetin.'
-                : 'Fillo duke regjistruar shpenzimin\ne parë të muajit.'}
+              {isBizMode ? t('budNoBizSub') : t('budNoExpensesSub')}
             </Text>
             <TouchableOpacity
               style={styles.emptyMonthBtn}
@@ -555,7 +559,7 @@ export default function Buxheti() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="add" size={15} color={C.white} />
-                <Text style={styles.emptyMonthBtnText}>Shto shpenzim</Text>
+                <Text style={styles.emptyMonthBtnText}>{t('budAddExpense')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -567,7 +571,7 @@ export default function Buxheti() {
             <View style={styles.sectionHeader}>
               <View style={[styles.sectionAccent, isBizMode && { backgroundColor: C.accentLight }]} />
               <Text style={styles.sectionTitle}>
-                {isBizMode ? 'Kategoritë e Biznesit' : 'Shpenzime sipas Kategorisë'}
+                {isBizMode ? t('budBizCategoriesTitle') : t('budCategories')}
               </Text>
             </View>
             <Card>
@@ -602,12 +606,12 @@ export default function Buxheti() {
                       <View style={styles.catDetails}>
                         <View style={styles.catHeader}>
                           <View style={styles.catNameRow}>
-                            <Text style={styles.catName}>{item.cat.name}</Text>
+                            <Text style={styles.catName}>{getCategoryName(item.cat.id, lang)}</Text>
                             {trendIcon && (
                               <Ionicons name={trendIcon as any} size={13} color={trendColor} />
                             )}
                           </View>
-                          <Text style={styles.catAmount}>{formatCurrency(item.total, 'ALL')}</Text>
+                          <Text style={styles.catAmount}>{formatInPreferred(item.total, state.preferredCurrency)}</Text>
                         </View>
                         <View style={styles.catProgressTrack}>
                           <View
@@ -627,11 +631,11 @@ export default function Buxheti() {
                         </View>
                         <View style={styles.catMeta}>
                           <Text style={styles.catPct}>
-                            {catPct.toFixed(1)}% e buxhetit · {item.count} tx
+                            {catPct.toFixed(1)}% {t('budCatOf')} · {item.count} tx
                           </Text>
                           {risk && risk.avgMonthlyTotal > 0 && (
                             <Text style={[styles.catProjected, { color: trendColor }]}>
-                              Parashikim: {formatCurrency(Math.round(risk.projectedMonthly), 'ALL')}/muaj
+                              {t('budCatForecast')}: {formatInPreferred(Math.round(risk.projectedMonthly), state.preferredCurrency)}{t('dashPerMonth')}
                             </Text>
                           )}
                         </View>
@@ -639,7 +643,7 @@ export default function Buxheti() {
                           <View style={styles.catRiskRow}>
                             <Ionicons name="alert-circle-outline" size={11} color={C.danger} />
                             <Text style={styles.catRiskText}>
-                              +{Math.round(risk.pctChange)}% mbi normën historike
+                              +{Math.round(risk.pctChange)}% {lang === 'en' ? 'above historical norm' : 'mbi normën historike'}
                             </Text>
                           </View>
                         )}
@@ -665,8 +669,8 @@ export default function Buxheti() {
             <View style={styles.modalIconWrap}>
               <Ionicons name="wallet-outline" size={22} color={C.primary} />
             </View>
-            <Text style={styles.modalTitle}>Ndrysho Buxhetin</Text>
-            <Text style={styles.modalSub}>Vendos buxhetin tënd mujor në Lekë</Text>
+            <Text style={styles.modalTitle}>{t('budEditModalTitle')}</Text>
+            <Text style={styles.modalSub}>{t('budEditModalSub')}</Text>
             <View style={styles.modalInput}>
               <TextInput
                 value={newBudget}
@@ -686,10 +690,10 @@ export default function Buxheti() {
                 style={{ flex: 1 }}
                 disabled={saving}
               >
-                Anulo
+                {t('cancel')}
               </Button>
               <Button onPress={handleSave} style={{ flex: 1 }} disabled={saving} loading={saving}>
-                {saving ? 'Duke ruajtur...' : 'Ruaj'}
+                {saving ? t('budSaving') : t('save')}
               </Button>
             </View>
           </TouchableOpacity>
@@ -699,7 +703,8 @@ export default function Buxheti() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
   pageTitle: { fontSize: 28, fontWeight: '800', color: C.text, letterSpacing: -0.7 },
@@ -1139,4 +1144,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
   },
   emptyMonthBtnText: { fontSize: 14, fontWeight: '700', color: C.white },
-});
+  });
+}

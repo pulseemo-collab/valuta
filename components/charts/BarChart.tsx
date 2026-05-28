@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import Svg, { Rect, G, Line, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Circle } from 'react-native-svg';
-import { C } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 
 interface DataPoint {
   label: string;
@@ -20,14 +20,20 @@ interface BarChartProps {
 export function BarChart({
   data,
   height = 200,
-  barColor = C.primary,
-  barColorEnd = C.primaryDark,
+  barColor,
+  barColorEnd,
   formatValue,
   activeIndex,
 }: BarChartProps) {
+  const C = useThemeColors();
+  const styles = useMemo(() => makeStyles(C), [C]);
+
+  const effectiveBarColor = barColor ?? C.primary;
+  const effectiveBarColorEnd = barColorEnd ?? C.primaryDark;
+
   const BAR_WIDTH = 34;
   const SPACING = 14;
-  const PADDING_TOP = 32;   // extra room for value labels above bars
+  const PADDING_TOP = 32;
   const LABEL_HEIGHT = 24;
   const chartHeight = height - LABEL_HEIGHT - PADDING_TOP;
   const maxValue = Math.max(...data.map((d) => d.value), 1);
@@ -46,8 +52,8 @@ export function BarChart({
         <Svg width={totalWidth} height={height}>
           <Defs>
             <SvgGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={barColor} stopOpacity="1" />
-              <Stop offset="100%" stopColor={barColorEnd} stopOpacity="0.75" />
+              <Stop offset="0%" stopColor={effectiveBarColor} stopOpacity="1" />
+              <Stop offset="100%" stopColor={effectiveBarColorEnd} stopOpacity="0.75" />
             </SvgGradient>
             <SvgGradient id="barGradActive" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0%" stopColor={C.accentLight} stopOpacity="1" />
@@ -59,7 +65,6 @@ export function BarChart({
             </SvgGradient>
           </Defs>
 
-          {/* Horizontal grid lines */}
           {[0.25, 0.5, 0.75, 1].map((frac) => (
             <Line
               key={frac}
@@ -84,52 +89,14 @@ export function BarChart({
 
             return (
               <G key={i}>
-                {/* Background track */}
-                <Rect
-                  x={x}
-                  y={PADDING_TOP}
-                  width={BAR_WIDTH}
-                  height={chartHeight}
-                  fill="url(#barGradBg)"
-                  rx={8}
-                  opacity={isDimmed ? 0.35 : 0.55}
-                />
-
-                {/* Data bar */}
-                <Rect
-                  x={x}
-                  y={y}
-                  width={BAR_WIDTH}
-                  height={barH}
-                  fill={isActive ? 'url(#barGradActive)' : 'url(#barGrad)'}
-                  rx={8}
-                  opacity={isDimmed ? 0.30 : 1}
-                />
-
-                {/* Top cap shine for active bar */}
+                <Rect x={x} y={PADDING_TOP} width={BAR_WIDTH} height={chartHeight} fill="url(#barGradBg)" rx={8} opacity={isDimmed ? 0.35 : 0.55} />
+                <Rect x={x} y={y} width={BAR_WIDTH} height={barH} fill={isActive ? 'url(#barGradActive)' : 'url(#barGrad)'} rx={8} opacity={isDimmed ? 0.30 : 1} />
                 {isActive && barH > 10 && (
-                  <Rect
-                    x={x + 4}
-                    y={y + 2}
-                    width={BAR_WIDTH - 8}
-                    height={6}
-                    fill="rgba(255,255,255,0.20)"
-                    rx={4}
-                  />
+                  <Rect x={x + 4} y={y + 2} width={BAR_WIDTH - 8} height={6} fill="rgba(255,255,255,0.20)" rx={4} />
                 )}
-
-                {/* Top glow dot for active */}
                 {isActive && barH > 8 && (
-                  <Circle
-                    cx={cx}
-                    cy={y}
-                    r={BAR_WIDTH / 2 - 2}
-                    fill={C.accentLight}
-                    opacity={0.14}
-                  />
+                  <Circle cx={cx} cy={y} r={BAR_WIDTH / 2 - 2} fill={C.accentLight} opacity={0.14} />
                 )}
-
-                {/* Value label above bar */}
                 {item.value > 0 && (
                   <SvgText
                     x={cx}
@@ -142,8 +109,6 @@ export function BarChart({
                     {formatShort(item.value)}
                   </SvgText>
                 )}
-
-                {/* Day label */}
                 <SvgText
                   x={cx}
                   y={height - 6}
@@ -163,9 +128,7 @@ export function BarChart({
       {formatValue && maxValue > 0 && (
         <View style={styles.yAxis}>
           {[maxValue, maxValue * 0.5, 0].map((v, i) => (
-            <Text key={i} style={styles.yLabel}>
-              {formatValue(v)}
-            </Text>
+            <Text key={i} style={styles.yLabel}>{formatValue(v)}</Text>
           ))}
         </View>
       )}
@@ -173,22 +136,10 @@ export function BarChart({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-  },
-  yAxis: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 24,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    pointerEvents: 'none',
-  },
-  yLabel: {
-    fontSize: 9,
-    color: C.textMuted,
-    fontWeight: '500',
-  },
-});
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    container: { position: 'relative' },
+    yAxis: { position: 'absolute', right: 0, top: 0, bottom: 24, justifyContent: 'space-between', alignItems: 'flex-end', pointerEvents: 'none' },
+    yLabel: { fontSize: 9, color: C.textMuted, fontWeight: '500' },
+  });
+}

@@ -1,5 +1,5 @@
-import type { Expense, CategoryId, Budget } from '@/types';
-import { getTotalALL, getCategoryTotals, formatCurrency } from '@/lib/utils';
+import type { Expense, CategoryId, Budget, Currency } from '@/types';
+import { getTotalALL, getCategoryTotals, formatInPreferred } from '@/lib/utils';
 
 export type RiskLevel = 'safe' | 'caution' | 'danger';
 
@@ -71,7 +71,9 @@ function roundToNearestK(n: number, k = 5000): number {
 
 export function getBudgetAdvisory(
   expenses: Expense[],
-  budget: Budget
+  budget: Budget,
+  preferred: Currency = 'ALL',
+  lang = 'sq'
 ): BudgetAdvisory {
   const now = new Date();
   const daysElapsed = now.getDate();
@@ -138,9 +140,14 @@ export function getBudgetAdvisory(
       const n = historicalTotals.length;
       suggestion = {
         amount: suggested,
-        basis:
-          n >= 3
-            ? `Bazuar në mesataren e 3 muajve të fundit (≈ ${formatCurrency(Math.round(avg), 'ALL')}/muaj)`
+        basis: lang === 'en'
+          ? n >= 3
+            ? `Based on 3-month average (≈ ${formatInPreferred(Math.round(avg), preferred)}/month)`
+            : n === 2
+            ? `Based on 2-month average`
+            : `Based on last month`
+          : n >= 3
+            ? `Bazuar në mesataren e 3 muajve të fundit (≈ ${formatInPreferred(Math.round(avg), preferred)}/muaj)`
             : n === 2
             ? `Bazuar në mesataren e 2 muajve të fundit`
             : `Bazuar në muajin e kaluar`,
@@ -213,7 +220,9 @@ export function getBudgetAdvisory(
     if (forecast.projectedOverrun > 0 && forecast.pctBudgetUsed < 100) {
       warnings.push({
         icon: 'trending-up-outline',
-        text: `Me këtë ritëm do tejkalosh buxhetin me ${formatCurrency(Math.round(forecast.projectedOverrun), 'ALL')}.`,
+        text: lang === 'en'
+          ? `At this pace you'll exceed the budget by ${formatInPreferred(Math.round(forecast.projectedOverrun), preferred)}.`
+          : `Me këtë ritëm do tejkalosh buxhetin me ${formatInPreferred(Math.round(forecast.projectedOverrun), preferred)}.`,
         severity: 'critical',
       });
     }
@@ -222,7 +231,9 @@ export function getBudgetAdvisory(
     if (daysElapsed <= 15 && forecast.pctBudgetUsed > 65) {
       warnings.push({
         icon: 'flash-outline',
-        text: `Ke shpenzuar ${forecast.pctBudgetUsed.toFixed(0)}% të buxhetit brenda ${daysElapsed} ditëve të para!`,
+        text: lang === 'en'
+          ? `${forecast.pctBudgetUsed.toFixed(0)}% of budget spent in the first ${daysElapsed} days!`
+          : `Ke shpenzuar ${forecast.pctBudgetUsed.toFixed(0)}% të buxhetit brenda ${daysElapsed} ditëve të para!`,
         severity: 'critical',
       });
     }
@@ -231,7 +242,9 @@ export function getBudgetAdvisory(
     if (forecast.safeDaily > 0 && daysRemaining >= 3 && forecast.riskLevel !== 'safe') {
       warnings.push({
         icon: 'shield-checkmark-outline',
-        text: `Shpenzo maks ${formatCurrency(Math.round(forecast.safeDaily), 'ALL')}/ditë për të mbetur brenda buxhetit.`,
+        text: lang === 'en'
+          ? `Spend max ${formatInPreferred(Math.round(forecast.safeDaily), preferred)}/day to stay within budget.`
+          : `Shpenzo maks ${formatInPreferred(Math.round(forecast.safeDaily), preferred)}/ditë për të mbetur brenda buxhetit.`,
         severity: 'info',
       });
     }
@@ -240,18 +253,24 @@ export function getBudgetAdvisory(
   // 4. Category-level spike warnings
   for (const risk of categoryRisks) {
     if (risk.riskLevel === 'none') continue;
-    const catName = CATEGORY_NAMES_AL[risk.category] ?? risk.category;
+    const cn = (lang === 'en'
+      ? { ushqim: 'Food', transport: 'Transport', faturat: 'Bills', shopping: 'Shopping', shendet: 'Health', argetime: 'Entertainment', biznes: 'Business', tjera: 'Other', taksa: 'Taxes', sherbime: 'Services', furnitor: 'Suppliers', inventar: 'Inventory', zyre: 'Office', punonjes: 'Employees', marketing_biz: 'Marketing', transport_biz: 'Transport' }
+      : CATEGORY_NAMES_AL)[risk.category] ?? risk.category;
     if (risk.riskLevel === 'high') {
       warnings.push({
         icon: 'alert-circle-outline',
-        text: `Shpenzimet për ${catName} janë rritur me ${Math.round(risk.pctChange)}% krahasuar me historikun.`,
+        text: lang === 'en'
+          ? `${cn} spending up ${Math.round(risk.pctChange)}% vs historical average.`
+          : `Shpenzimet për ${cn} janë rritur me ${Math.round(risk.pctChange)}% krahasuar me historikun.`,
         severity: 'warning',
         category: risk.category,
       });
     } else if (risk.riskLevel === 'medium') {
       warnings.push({
         icon: 'arrow-up-circle-outline',
-        text: `${catName}: ritëm mbi normën (+${Math.round(risk.pctChange)}% krahasuar me mesataren).`,
+        text: lang === 'en'
+          ? `${cn}: above-average pace (+${Math.round(risk.pctChange)}% vs average).`
+          : `${cn}: ritëm mbi normën (+${Math.round(risk.pctChange)}% krahasuar me mesataren).`,
         severity: 'info',
         category: risk.category,
       });
@@ -265,7 +284,8 @@ export function getBudgetAdvisory(
 // Returns InsightMessage-shaped objects so existing UI code can render them.
 
 export function getBudgetInsights(
-  advisory: BudgetAdvisory
+  advisory: BudgetAdvisory,
+  preferred: Currency = 'ALL'
 ): { icon: string; text: string; type: 'warning' | 'positive' | 'neutral' | 'info' }[] {
   const out: { icon: string; text: string; type: 'warning' | 'positive' | 'neutral' | 'info' }[] = [];
 
@@ -283,7 +303,7 @@ export function getBudgetInsights(
     if (f.riskLevel === 'safe' && f.pctBudgetUsed < 50 && f.daysElapsed >= 10) {
       out.push({
         icon: 'shield-checkmark-outline',
-        text: `Buxheti nën kontroll — ${f.pctBudgetUsed.toFixed(0)}% shpenzuar, parashikohet ${formatCurrency(Math.round(f.projectedMonthly), 'ALL')}.`,
+        text: `Buxheti nën kontroll — ${f.pctBudgetUsed.toFixed(0)}% shpenzuar, parashikohet ${formatInPreferred(Math.round(f.projectedMonthly), preferred)}.`,
         type: 'positive',
       });
     }

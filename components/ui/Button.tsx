@@ -1,4 +1,4 @@
-import React, { ReactNode, useRef } from 'react';
+import React, { ReactNode, useRef, useMemo } from 'react';
 import {
   Text,
   StyleSheet,
@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
@@ -41,51 +42,43 @@ export function Button({
   leftIcon,
   rightIcon,
 }: ButtonProps) {
+  const C = useThemeColors();
+  const { base, sizeMap, sizeTextMap, variantMap, variantHoveredMap, variantTextMap } = useMemo(() => buildStyles(C), [C]);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const isPrimary = variant === 'primary';
 
   const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.96,
-      useNativeDriver: true,
-      overshootClamping: true,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true, overshootClamping: true }).start();
   };
 
   const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      tension: 300,
-      friction: 20,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 300, friction: 20 }).start();
   };
 
   const content = (
-    <View style={styles.inner}>
+    <View style={base.inner}>
       {loading ? (
         <ActivityIndicator color={variant === 'outline' ? C.primary : C.white} size="small" />
       ) : (
         <>
-          {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
-          <Text style={[styles.text, sizeTextStyles[size], variantTextStyles[variant]]}>
+          {leftIcon && <View style={base.iconLeft}>{leftIcon}</View>}
+          <Text style={[base.text, sizeTextMap[size], variantTextMap[variant]]}>
             {children}
           </Text>
-          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
+          {rightIcon && <View style={base.iconRight}>{rightIcon}</View>}
         </>
       )}
     </View>
   );
 
   const webStyle = Platform.OS === 'web' ? ({ cursor: disabled ? 'not-allowed' : 'pointer' } as any) : {};
-  const glowStyle = isPrimary && !disabled ? styles.primaryGlow : undefined;
 
   return (
     <Animated.View
       style={[
         { transform: [{ scale: scaleAnim }] },
-        fullWidth && styles.fullWidth,
-        glowStyle,
+        fullWidth && base.fullWidth,
+        isPrimary && !disabled && base.primaryGlow,
         style,
       ]}
     >
@@ -95,13 +88,13 @@ export function Button({
         onPressOut={handlePressOut}
         disabled={disabled || loading}
         style={({ pressed, hovered }: any) => [
-          styles.base,
-          variantStyles[variant],
-          !isPrimary && sizeStyles[size],
-          fullWidth && styles.fullWidth,
-          disabled && styles.disabled,
-          !disabled && !isPrimary && hovered && variantHoveredStyles[variant],
-          pressed && styles.pressed,
+          base.base,
+          variantMap[variant],
+          !isPrimary && sizeMap[size],
+          fullWidth && base.fullWidth,
+          disabled && base.disabled,
+          !disabled && !isPrimary && hovered && variantHoveredMap[variant],
+          pressed && base.pressed,
           webStyle,
         ]}
       >
@@ -110,7 +103,7 @@ export function Button({
             colors={GRADIENTS.primaryShine}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={[styles.gradient, sizeStyles[size]]}
+            style={[base.gradient, sizeMap[size]]}
           >
             {content}
           </LinearGradient>
@@ -122,83 +115,61 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  gradient: {
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: {
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-  iconLeft: { marginRight: 8 },
-  iconRight: { marginLeft: 8 },
-  fullWidth: { width: '100%' },
-  disabled: { opacity: 0.38 },
-  pressed: { opacity: 0.88 },
-  primaryGlow: {
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.42,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-});
+function buildStyles(C: ColorPalette) {
+  const base = StyleSheet.create({
+    base: { borderRadius: 14, overflow: 'hidden' },
+    gradient: { borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+    inner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+    text: { fontWeight: '700', letterSpacing: 0.1 },
+    iconLeft: { marginRight: 8 },
+    iconRight: { marginLeft: 8 },
+    fullWidth: { width: '100%' },
+    disabled: { opacity: 0.38 },
+    pressed: { opacity: 0.88 },
+    primaryGlow: {
+      shadowColor: C.primary,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.42,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+  });
 
-const sizeStyles: Record<Size, ViewStyle> = {
-  sm: { paddingVertical: 9, paddingHorizontal: 15 },
-  md: { paddingVertical: 14, paddingHorizontal: 20 },
-  lg: { paddingVertical: 17, paddingHorizontal: 28 },
-};
+  const sizeMap: Record<Size, ViewStyle> = {
+    sm: { paddingVertical: 9, paddingHorizontal: 15 },
+    md: { paddingVertical: 14, paddingHorizontal: 20 },
+    lg: { paddingVertical: 17, paddingHorizontal: 28 },
+  };
 
-const sizeTextStyles: Record<Size, TextStyle> = {
-  sm: { fontSize: 13 },
-  md: { fontSize: 15 },
-  lg: { fontSize: 16, letterSpacing: 0.2 },
-};
+  const sizeTextMap: Record<Size, TextStyle> = {
+    sm: { fontSize: 13 },
+    md: { fontSize: 15 },
+    lg: { fontSize: 16, letterSpacing: 0.2 },
+  };
 
-const variantStyles: Record<Variant, ViewStyle> = {
-  primary: { backgroundColor: C.primary },
-  secondary: {
-    backgroundColor: C.elevated,
-    borderWidth: 1,
-    borderColor: C.borderLight,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: C.primary,
-  },
-  ghost: { backgroundColor: 'transparent' },
-  danger: {
-    backgroundColor: C.dangerBgSubtle,
-    borderWidth: 1.5,
-    borderColor: C.dangerBorder,
-  },
-};
+  const variantMap: Record<Variant, ViewStyle> = {
+    primary: { backgroundColor: C.primary },
+    secondary: { backgroundColor: C.elevated, borderWidth: 1, borderColor: C.borderLight },
+    outline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: C.primary },
+    ghost: { backgroundColor: 'transparent' },
+    danger: { backgroundColor: C.dangerBgSubtle, borderWidth: 1.5, borderColor: C.dangerBorder },
+  };
 
-const variantHoveredStyles: Record<Variant, ViewStyle> = {
-  primary: {},
-  secondary: { backgroundColor: C.floating, borderColor: C.borderGlassLight },
-  outline: { backgroundColor: C.primaryBgSubtle },
-  ghost: { backgroundColor: C.elevated },
-  danger: { backgroundColor: C.dangerBg },
-};
+  const variantHoveredMap: Record<Variant, ViewStyle> = {
+    primary: {},
+    secondary: { backgroundColor: C.floating, borderColor: C.borderGlassLight },
+    outline: { backgroundColor: C.primaryBgSubtle },
+    ghost: { backgroundColor: C.elevated },
+    danger: { backgroundColor: C.dangerBg },
+  };
 
-const variantTextStyles: Record<Variant, TextStyle> = {
-  primary: { color: C.white },
-  secondary: { color: C.text },
-  outline: { color: C.primary },
-  ghost: { color: C.textSub },
-  danger: { color: C.danger },
-};
+  const variantTextMap: Record<Variant, TextStyle> = {
+    primary: { color: C.white },
+    secondary: { color: C.text },
+    outline: { color: C.primary },
+    ghost: { color: C.textSub },
+    danger: { color: C.danger },
+  };
+
+  return { base, sizeMap, sizeTextMap, variantMap, variantHoveredMap, variantTextMap };
+}

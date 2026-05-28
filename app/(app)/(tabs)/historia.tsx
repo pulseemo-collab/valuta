@@ -20,12 +20,14 @@ import { useStore } from '@/lib/store';
 import { TransactionItem } from '@/components/dashboard/TransactionItem';
 import { SyncingBanner } from '@/components/ui/SyncingBanner';
 import { ListSkeleton } from '@/components/ui/SkeletonLoader';
-import { CATEGORIES } from '@/constants/categories';
+import { CATEGORIES, getCategoryName } from '@/constants/categories';
 import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
 import { CURRENCIES } from '@/constants/currencies';
-import { groupByDate, formatCurrency, getTotalALL } from '@/lib/utils';
+import { groupByDate, formatInPreferred, getTotalALL } from '@/lib/utils';
 import { detectRecurring, getExpenseKey } from '@/lib/detectRecurring';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 import type { Expense, CategoryId, Currency, AppMode } from '@/types';
 
 type ModeFilter = 'all' | 'personal' | 'business';
@@ -42,14 +44,14 @@ type ExpenseSection = {
   data: Expense[];
 };
 
-function formatGroupDate(key: string): string {
+function formatGroupDate(key: string, lang: string): string {
   const date = new Date(key);
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return 'Sot';
-  if (date.toDateString() === yesterday.toDateString()) return 'Dje';
-  return date.toLocaleDateString('sq-AL', { weekday: 'long', day: 'numeric', month: 'long' });
+  if (date.toDateString() === today.toDateString()) return lang === 'en' ? 'Today' : 'Sot';
+  if (date.toDateString() === yesterday.toDateString()) return lang === 'en' ? 'Yesterday' : 'Dje';
+  return date.toLocaleDateString(lang === 'en' ? 'en-US' : 'sq-AL', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 function isDateToday(key: string): boolean {
@@ -68,6 +70,9 @@ function SwipeRow({
   isLast: boolean;
   children: React.ReactNode;
 }) {
+  const C = useThemeColors();
+  const { t } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
   const isWeb = Platform.OS === 'web';
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
@@ -154,7 +159,7 @@ function SwipeRow({
         activeOpacity={0.85}
       >
         <Ionicons name="trash-outline" size={18} color={C.white} />
-        <Text style={styles.swipeDeleteLabel}>Fshi</Text>
+        <Text style={styles.swipeDeleteLabel}>{t('histDeleteLabel')}</Text>
       </TouchableOpacity>
 
       {/* Swipeable content — bg matches card so it covers the delete zone until revealed */}
@@ -174,6 +179,9 @@ export default function Historia() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= 900;
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
 
   const isBizMode = state.mode === 'business';
 
@@ -213,7 +221,7 @@ export default function Historia() {
   const sections = useMemo((): ExpenseSection[] => {
     const grouped = groupByDate(filtered);
     return Object.entries(grouped).map(([dateKey, expenses]) => ({
-      title: formatGroupDate(dateKey),
+      title: formatGroupDate(dateKey, lang),
       isToday: isDateToday(dateKey),
       total: getTotalALL(expenses),
       txCount: expenses.length,
@@ -274,7 +282,7 @@ export default function Historia() {
 
   const filterPanelHeight = filterAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 178],
+    outputRange: [0, 220],
   });
   const filterPanelOpacity = filterAnim.interpolate({
     inputRange: [0, 0.45, 1],
@@ -284,7 +292,7 @@ export default function Historia() {
   // ── Section header ────────────────────────────────────────────────────────
   const renderSectionHeader = useCallback(
     ({ section }: { section: ExpenseSection }) => (
-      <View style={[styles.sectionHeaderOuter, { backgroundColor: C.bg }]}>
+      <View style={styles.sectionHeaderOuter}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionHeaderLeft}>
             <View style={[styles.sectionDot, section.isToday && styles.sectionDotToday]} />
@@ -297,13 +305,13 @@ export default function Historia() {
           </View>
           <View style={styles.sectionTotalPill}>
             <Text style={styles.sectionTotalText}>
-              {formatCurrency(Math.round(section.total), 'ALL')}
+              {formatInPreferred(Math.round(section.total), state.preferredCurrency)}
             </Text>
           </View>
         </View>
       </View>
     ),
-    []
+    [state.preferredCurrency]
   );
 
   // ── Item renderer ─────────────────────────────────────────────────────────
@@ -346,7 +354,7 @@ export default function Historia() {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Kërko shpenzimet..."
+            placeholder={t('histSearch')}
             placeholderTextColor={C.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -405,7 +413,7 @@ export default function Historia() {
                   color={activeModeFilter === 'business' ? C.accentLight : C.primary}
                 />
                 <Text style={[styles.activePillText, activeModeFilter === 'business' && { color: C.accentLight }]}>
-                  {activeModeFilter === 'business' ? 'Biznes' : 'Personal'}
+                  {activeModeFilter === 'business' ? t('histModeBiz') : t('histModePersonal')}
                 </Text>
               </View>
             )}
@@ -414,7 +422,7 @@ export default function Historia() {
               return cat ? (
                 <View style={[styles.activePill, { borderColor: cat.color + '40' }]}>
                   <Ionicons name={cat.icon as any} size={10} color={cat.color} />
-                  <Text style={[styles.activePillText, { color: cat.color }]}>{cat.name}</Text>
+                  <Text style={[styles.activePillText, { color: cat.color }]}>{getCategoryName(cat.id, lang)}</Text>
                 </View>
               ) : null;
             })()}
@@ -426,7 +434,7 @@ export default function Historia() {
           </ScrollView>
           <TouchableOpacity onPress={clearFilters} style={styles.clearAllBtn} activeOpacity={0.7}>
             <Ionicons name="close-outline" size={13} color={C.textMuted} />
-            <Text style={styles.clearAllText}>Pastro</Text>
+            <Text style={styles.clearAllText}>{t('histClear')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -442,9 +450,9 @@ export default function Historia() {
           {/* Mode filter toggle */}
           <View style={styles.modeToggleRow}>
             {([
-              { key: 'all', label: 'Të gjitha', icon: 'apps-outline' },
-              { key: 'personal', label: 'Personal', icon: 'person-outline' },
-              { key: 'business', label: 'Biznes', icon: 'briefcase-outline' },
+              { key: 'all', label: t('histModeAll'), icon: 'apps-outline' },
+              { key: 'personal', label: t('histModePersonal'), icon: 'person-outline' },
+              { key: 'business', label: t('histModeBiz'), icon: 'briefcase-outline' },
             ] as { key: ModeFilter; label: string; icon: string }[]).map((opt) => {
               const isActive = activeModeFilter === opt.key;
               return (
@@ -487,7 +495,7 @@ export default function Historia() {
               activeOpacity={0.72}
             >
               <Text style={[styles.chipText, activeCategory === ALL_CATEGORIES && styles.chipTextActive]}>
-                Të gjitha
+                {t('histModeAll')}
               </Text>
             </TouchableOpacity>
             {[...CATEGORIES, ...BUSINESS_CATEGORIES].map((cat) => {
@@ -504,7 +512,7 @@ export default function Historia() {
                 >
                   <Ionicons name={cat.icon as any} size={12} color={isActive ? cat.color : C.textMuted} />
                   <Text style={[styles.chipText, isActive && { color: cat.color, fontWeight: '700' }]}>
-                    {cat.name}
+                    {getCategoryName(cat.id, lang)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -517,7 +525,7 @@ export default function Historia() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            {[{ code: ALL_CURRENCIES, name: 'Të gjitha' }, ...CURRENCIES].map((c) => {
+            {[{ code: ALL_CURRENCIES, name: t('histCurrencyAll') }, ...CURRENCIES].map((c) => {
               const isActive = activeCurrency === c.code;
               return (
                 <TouchableOpacity
@@ -527,7 +535,7 @@ export default function Historia() {
                   activeOpacity={0.72}
                 >
                   <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                    {c.code === ALL_CURRENCIES ? 'Të gjitha' : c.code}
+                    {c.code === ALL_CURRENCIES ? t('histCurrencyAll') : c.code}
                   </Text>
                 </TouchableOpacity>
               );
@@ -540,10 +548,10 @@ export default function Historia() {
       {filtered.length > 0 && (
         <View style={styles.summaryBar}>
           <Text style={styles.summaryCount}>
-            {filtered.length} {filtered.length === 1 ? 'transaksion' : 'transaksione'}
+            {filtered.length} {filtered.length === 1 ? t('histTransaction') : t('histTransactions')}
           </Text>
           <Text style={styles.summaryTotal}>
-            {formatCurrency(Math.round(totalFiltered), 'ALL')}
+            {formatInPreferred(Math.round(totalFiltered), state.preferredCurrency)}
           </Text>
         </View>
       )}
@@ -558,7 +566,7 @@ export default function Historia() {
     return (
       <SafeAreaView style={styles.root} edges={['top']}>
         <View style={styles.screenHeader}>
-          <Text style={styles.title}>Historia</Text>
+          <Text style={styles.title}>{t('histTitle')}</Text>
         </View>
         <View style={{ paddingHorizontal: 20 }}>
           <ListSkeleton rows={6} />
@@ -571,11 +579,11 @@ export default function Historia() {
     <SafeAreaView style={styles.root} edges={['top']}>
       {/* Header */}
       <View style={styles.screenHeader}>
-        <Text style={styles.title}>Historia</Text>
+        <Text style={styles.title}>{t('histTitle')}</Text>
         <View style={styles.headerBadge}>
           <View style={styles.headerBadgeDot} />
           <Text style={styles.headerBadgeText}>
-            {state.expenses.length} {state.expenses.length === 1 ? 'hyrje' : 'hyrje'}
+            {state.expenses.length} {t('histEntries')}
           </Text>
         </View>
       </View>
@@ -596,22 +604,20 @@ export default function Historia() {
               <Ionicons name={isBizMode ? 'briefcase-outline' : 'receipt-outline'} size={28} color={isBizMode ? C.accentLight : C.primary} />
             </LinearGradient>
             <Text style={styles.emptyTitle}>
-              {isBizMode ? 'Asnjë shpenzim biznesi ende' : 'Asnjë shpenzim ende'}
+              {isBizMode ? t('histNoBizTitle') : t('histEmptyTitle')}
             </Text>
             <Text style={styles.emptySub}>
-              {isBizMode
-                ? 'Regjistro shpenzimet e biznesit tënd\ndhe fillo të gjurmosh kostot.'
-                : 'Shto shpenzimin e parë dhe fillo\ntë gjurmosh financat tua.'}
+              {isBizMode ? t('histNoBizSub') : t('histEmptySub')}
             </Text>
             <View style={styles.emptyFeatures}>
               {(isBizMode ? [
-                { icon: 'cube-outline', text: 'Gjurmo furnitorë dhe inventar' },
-                { icon: 'business-outline', text: 'Ndaj kostot operative' },
-                { icon: 'calculator-outline', text: 'Mbaj shënime për taksa e shërbime' },
+                { icon: 'cube-outline', text: t('histBizFeature1') },
+                { icon: 'business-outline', text: t('histBizFeature2') },
+                { icon: 'calculator-outline', text: t('histBizFeature3') },
               ] : [
-                { icon: 'filter-outline', text: 'Filtro sipas kategorisë dhe monedhës' },
-                { icon: 'calendar-outline', text: 'Shiko historinë sipas datës' },
-                { icon: 'search-outline', text: 'Kërko çdo transaksion lehtësisht' },
+                { icon: 'filter-outline', text: t('histPersonalFeature1') },
+                { icon: 'calendar-outline', text: t('histPersonalFeature2') },
+                { icon: 'search-outline', text: t('histPersonalFeature3') },
               ] as const).map((f) => (
                 <View key={f.icon} style={styles.emptyFeatureRow}>
                   <View style={[styles.emptyFeatureIcon, isBizMode && { backgroundColor: C.accentBgSubtle, borderColor: C.accentBorder }]}>
@@ -633,7 +639,7 @@ export default function Historia() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="add" size={16} color={C.white} />
-                <Text style={styles.emptyActionText}>Shto shpenzimin e parë</Text>
+                <Text style={styles.emptyActionText}>{t('histAddFirst')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -663,11 +669,11 @@ export default function Historia() {
                 >
                   <Ionicons name="search-outline" size={26} color={C.accentLight} />
                 </LinearGradient>
-                <Text style={styles.filterEmptyTitle}>Nuk u gjet asgjë</Text>
-                <Text style={styles.filterEmptySub}>Provo të ndryshosh filtrat</Text>
+                <Text style={styles.filterEmptyTitle}>{t('histFilterEmptyTitle')}</Text>
+                <Text style={styles.filterEmptySub}>{t('histFilterEmptySub')}</Text>
                 {activeFilterCount > 0 && (
                   <TouchableOpacity onPress={clearFilters} style={styles.filterEmptyClear} activeOpacity={0.75}>
-                    <Text style={styles.filterEmptyClearText}>Pastro filtrat</Text>
+                    <Text style={styles.filterEmptyClearText}>{t('histClearFilters')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -681,7 +687,8 @@ export default function Historia() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
 
   // ── Screen header ─────────────────────────────────────────
@@ -895,6 +902,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 18,
     paddingBottom: 8,
+    backgroundColor: C.bg,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1003,6 +1011,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.dangerBgSubtle,
     borderWidth: 1,
     borderColor: C.dangerBorder,
+    zIndex: 10,
   },
 
   // ── Empty states ──────────────────────────────────────────
@@ -1095,4 +1104,5 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   filterEmptyClearText: { fontSize: 13, color: C.textSub, fontWeight: '600' },
-});
+  });
+}

@@ -9,6 +9,7 @@ import {
   useWindowDimensions,
   Pressable,
   Animated,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +22,7 @@ import { Card } from '@/components/ui/Card';
 import { SyncingBanner } from '@/components/ui/SyncingBanner';
 import { DashboardSkeleton } from '@/components/ui/SkeletonLoader';
 import {
-  formatCurrency,
+  formatInPreferred,
   getTotalALL,
   getTodayTotal,
   getWeekTotal,
@@ -36,11 +37,15 @@ import {
   getGoalInsights,
   type InsightMessage,
 } from '@/lib/utils';
+import { useNotifContext } from '@/lib/NotificationContext';
+import { computePendingNotifications } from '@/lib/notificationEngine';
 import { detectRecurring, getRecurringInsights, getExpenseKey } from '@/lib/detectRecurring';
 import { getBudgetAdvisory, getBudgetInsights } from '@/lib/budgetAdvisor';
-import { C, GRADIENTS } from '@/constants/colors';
-import { getCategoryById } from '@/constants/categories';
+import { GRADIENTS } from '@/constants/colors';
+import { getCategoryById, getCategoryName } from '@/constants/categories';
 import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
+import { useThemeColors, useIsLight, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 import type { CategoryId } from '@/types';
 
 // ── Staggered entrance wrapper ─────────────────────────────────────────────
@@ -111,14 +116,14 @@ function useCountUp(target: number, duration = 1300, delay = 180) {
   return value;
 }
 
-function siColor(type: InsightMessage['type']): string {
+function siColor(C: ColorPalette, type: InsightMessage['type']): string {
   if (type === 'warning') return C.warning;
   if (type === 'positive') return C.primary;
   if (type === 'info') return C.accent;
   return C.textMuted;
 }
 
-function siBg(type: InsightMessage['type']): string {
+function siBg(C: ColorPalette, type: InsightMessage['type']): string {
   if (type === 'warning') return C.warningBgSubtle;
   if (type === 'positive') return C.primaryBgSubtle;
   if (type === 'info') return C.accentBgSubtle;
@@ -132,6 +137,18 @@ export default function Dashboard() {
   const { width } = useWindowDimensions();
   const isMobile = Platform.OS !== 'web' || width < 768;
   const isDesktop = Platform.OS === 'web' && width >= 1024;
+  const C = useThemeColors();
+  const isLight = useIsLight();
+  const { t, lang } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C, isLight), [C, isLight]);
+  const { prefs, dismissBanner } = useNotifContext();
+  const [showNotifCenter, setShowNotifCenter] = useState(false);
+  const [centerDismissed, setCenterDismissed] = useState<Set<string>>(new Set());
+
+  const dismissCenterItem = (id: string) => {
+    setCenterDismissed((prev) => new Set([...prev, id]));
+    dismissBanner();
+  };
 
   const { expenses, budget } = state;
 
@@ -156,7 +173,7 @@ export default function Dashboard() {
 
   // Insights computations
   const topCategories = getCategoryTotals(expenses).slice(0, 4);
-  const weeklyData = getWeeklyData(expenses);
+  const weeklyData = getWeeklyData(expenses, lang);
   const txCount = expenses.filter((e) => isThisMonth(e.date)).length;
   const daysElapsed = new Date().getDate();
   const avgDaily = daysElapsed > 0 ? monthALL / daysElapsed : 0;
@@ -209,22 +226,22 @@ export default function Dashboard() {
     [recurringPatterns]
   );
   const recurringInsights = React.useMemo(
-    () => getRecurringInsights(recurringPatterns),
-    [recurringPatterns]
+    () => getRecurringInsights(recurringPatterns, state.preferredCurrency, lang),
+    [recurringPatterns, state.preferredCurrency, lang]
   );
 
   const budgetAdvisory = React.useMemo(
-    () => getBudgetAdvisory(expenses, budget),
-    [expenses, budget]
+    () => getBudgetAdvisory(expenses, budget, state.preferredCurrency, lang),
+    [expenses, budget, state.preferredCurrency, lang]
   );
   const budgetInsights = React.useMemo(
-    () => getBudgetInsights(budgetAdvisory),
-    [budgetAdvisory]
+    () => getBudgetInsights(budgetAdvisory, state.preferredCurrency),
+    [budgetAdvisory, state.preferredCurrency]
   );
 
   const dashInsights = React.useMemo(() => {
     // Priority: budget warnings first, then base insights, then recurring, then subscriptions
-    const base = getInsights(expenses, { monthly: budget.monthly });
+    const base = getInsights(expenses, { monthly: budget.monthly }, state.preferredCurrency, lang);
     const baseFiltered = base.filter(
       (i) => !i.icon.includes('warning') && !i.icon.includes('alert') && !i.icon.includes('calculator')
     ).slice(0, 1);
@@ -236,14 +253,16 @@ export default function Dashboard() {
     if (activeSubCount > 0) {
       subInsights.push({
         icon: 'apps-outline',
-        text: `Ke ${activeSubCount} abonim${activeSubCount !== 1 ? 'e' : ''} aktiv${activeSubCount !== 1 ? 'e' : ''}`,
+        text: lang === 'en'
+          ? `${activeSubCount} active subscription${activeSubCount !== 1 ? 's' : ''}`
+          : `Ke ${activeSubCount} abonim${activeSubCount !== 1 ? 'e' : ''} aktiv${activeSubCount !== 1 ? 'e' : ''}`,
         type: 'info',
       });
     }
     if (subMonthlyTotal > 0) {
       subInsights.push({
         icon: 'repeat-outline',
-        text: `Abonimet mujore: ${formatCurrency(Math.round(subMonthlyTotal), 'ALL')}`,
+        text: `${lang === 'en' ? 'Monthly subscriptions' : 'Abonimet mujore'}: ${formatInPreferred(Math.round(subMonthlyTotal), state.preferredCurrency)}`,
         type: 'info',
       });
     }
@@ -252,7 +271,7 @@ export default function Dashboard() {
     const daysElapsedLocal = new Date().getDate();
     const avgSpend = daysElapsedLocal > 0 ? (budget.monthly > 0 ? getMonthTotal(expenses) / daysElapsedLocal * 30 : 0) : 0;
     const monthlySavingsEst = Math.max(budget.monthly - avgSpend, 0);
-    const goalInsights = getGoalInsights(state.goals, monthlySavingsEst);
+    const goalInsights = getGoalInsights(state.goals, monthlySavingsEst, lang);
 
     const combined = [
       ...budgetInsights.slice(0, 1),
@@ -262,32 +281,32 @@ export default function Dashboard() {
       ...recurringInsights.slice(0, 1),
     ];
     return combined.slice(0, 3);
-  }, [expenses, budget, recurringInsights, budgetInsights, state.subscriptions, state.goals]);
+  }, [expenses, budget, recurringInsights, budgetInsights, state.subscriptions, state.goals, state.preferredCurrency, lang]);
 
   const bizSmartInsights = React.useMemo((): InsightMessage[] => {
     if (!isBizMode || bizMonthExpenses.length === 0) return [];
     const msgs: InsightMessage[] = [];
     if (bizTopCategories.length > 0) {
       const info = getCategoryById(bizTopCategories[0].category as CategoryId);
-      msgs.push({ type: 'positive', icon: info.icon as any, text: `Kategoria kryesore e biznesit: ${info.name} — ${formatCurrency(Math.round(bizTopCategories[0].total), 'ALL')} (${bizTopCategories[0].percent.toFixed(0)}%)` });
+      msgs.push({ type: 'positive', icon: info.icon as any, text: `${lang === 'en' ? 'Top business category' : 'Kategoria kryesore e biznesit'}: ${getCategoryName(info.id, lang)} — ${formatInPreferred(Math.round(bizTopCategories[0].total), state.preferredCurrency)} (${bizTopCategories[0].percent.toFixed(0)}%)` });
     }
     if (bizOpCostTotal > 0 && bizMonthTotal > 0) {
-      msgs.push({ type: 'info', icon: 'business-outline' as any, text: `Kosto operative: ${formatCurrency(Math.round(bizOpCostTotal), 'ALL')} — ${Math.round((bizOpCostTotal / bizMonthTotal) * 100)}% e shpenzimeve` });
+      msgs.push({ type: 'info', icon: 'business-outline' as any, text: `${lang === 'en' ? 'Operating costs' : 'Kosto operative'}: ${formatInPreferred(Math.round(bizOpCostTotal), state.preferredCurrency)} — ${Math.round((bizOpCostTotal / bizMonthTotal) * 100)}% ${lang === 'en' ? 'of expenses' : 'e shpenzimeve'}` });
     }
     if (bizTaxServiceTotal > 0) {
-      msgs.push({ type: 'warning', icon: 'calculator-outline' as any, text: `Taksa dhe shërbime: ${formatCurrency(Math.round(bizTaxServiceTotal), 'ALL')} këtë muaj` });
+      msgs.push({ type: 'warning', icon: 'calculator-outline' as any, text: `${lang === 'en' ? 'Tax & services' : 'Taksa dhe shërbime'}: ${formatInPreferred(Math.round(bizTaxServiceTotal), state.preferredCurrency)} ${lang === 'en' ? 'this month' : 'këtë muaj'}` });
     }
     if (msgs.length === 0 && bizFurnitorInvTotal > 0) {
-      msgs.push({ type: 'info', icon: 'cube-outline' as any, text: `Furnitorë dhe inventar: ${formatCurrency(Math.round(bizFurnitorInvTotal), 'ALL')} këtë muaj` });
+      msgs.push({ type: 'info', icon: 'cube-outline' as any, text: `${lang === 'en' ? 'Suppliers & inventory' : 'Furnitorë dhe inventar'}: ${formatInPreferred(Math.round(bizFurnitorInvTotal), state.preferredCurrency)} ${lang === 'en' ? 'this month' : 'këtë muaj'}` });
     }
     return msgs.slice(0, 3);
-  }, [isBizMode, bizTopCategories, bizMonthTotal, bizOpCostTotal, bizTaxServiceTotal, bizFurnitorInvTotal, bizMonthExpenses]);
+  }, [isBizMode, bizTopCategories, bizMonthTotal, bizOpCostTotal, bizTaxServiceTotal, bizFurnitorInvTotal, bizMonthExpenses, state.preferredCurrency, lang]);
 
   const maxWeekVal = Math.max(...weeklyData.map((d) => d.value), 1);
   const todayDayIdx = new Date().getDay();
 
   // Monthly trend + projection
-  const monthlyTrendData = getMonthlyData(expenses);
+  const monthlyTrendData = getMonthlyData(expenses, lang);
   const maxMonthlyVal = Math.max(...monthlyTrendData.map((d) => d.value), 1);
   const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
   const daysRemaining = Math.max(daysInMonth - daysElapsed, 0);
@@ -299,7 +318,7 @@ export default function Dashboard() {
   const heroSection = (
     <AnimatedSection delay={60}>
       <LinearGradient
-        colors={GRADIENTS.heroRich}
+        colors={isLight ? (['#FFFFFF', '#F1F5F9'] as string[]) : GRADIENTS.heroRich}
         style={[styles.heroBanner, isDesktop && styles.heroBannerDesktop]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -310,10 +329,12 @@ export default function Dashboard() {
         <View style={styles.heroShimmerLine} />
 
         <Text style={[styles.heroLabel, isDesktop && styles.heroLabelDesktop]}>
-          {isBizMode ? 'Shpenzime biznesi këtë muaj' : 'Shpenzuar këtë muaj'}
+          {isBizMode ? t('dashHeroBizSpentMonth') : t('dashHeroSpentMonth')}
         </Text>
         <Text style={[styles.heroAmount, isDesktop && styles.heroAmountDesktop]}>
-          {isBizMode ? formatCurrency(animatedBizMonthALL, 'ALL') : formatCurrency(animatedMonthALL, 'ALL')}
+          {isBizMode
+            ? formatInPreferred(animatedBizMonthALL, state.preferredCurrency)
+            : formatInPreferred(animatedMonthALL, state.preferredCurrency)}
         </Text>
 
         <View style={styles.heroMeta}>
@@ -341,14 +362,14 @@ export default function Dashboard() {
               ]}
             >
               {isBizMode
-                ? (bizTxCount > 0 ? `${bizTxCount} transaksione biznesi` : 'Filloni me biznesi')
-                : isNewUser ? 'Filloni sot' : `${budgetPct.toFixed(0)}% e buxhetit`}
+                ? (bizTxCount > 0 ? `${bizTxCount} ${t('dashInsightTransactions').toLowerCase()}` : t('dashBizStartText'))
+                : isNewUser ? t('dashStartToday') : `${budgetPct.toFixed(0)}% ${t('dashInsights').toLowerCase()}`}
             </Text>
           </View>
           {!isNewUser && (
             <TouchableOpacity onPress={() => router.push('/raporte' as any)}>
               <Text style={[styles.heroLink, isBizMode && { color: C.accentLight }]}>
-                {isBizMode ? 'Shiko raportet →' : 'Shiko raportet →'}
+                {t('dashSeeReports')}
               </Text>
             </TouchableOpacity>
           )}
@@ -356,7 +377,7 @@ export default function Dashboard() {
 
         {/* Weekly mini sparkline */}
         <View style={styles.heroSparklineWrap}>
-          <Text style={styles.heroSparklineHeading}>{isBizMode ? 'Kjo javë — biznesi' : 'Kjo javë'}</Text>
+          <Text style={styles.heroSparklineHeading}>{isBizMode ? t('dashThisWeekBiz') : t('dashThisWeek')}</Text>
           <View style={[styles.heroSparkline, isDesktop && styles.heroSparklineDesktop]}>
             {weeklyData.map((d, i) => {
               const barH = Math.max((d.value / maxWeekVal) * (isDesktop ? 38 : 26), d.value > 0 ? 4 : 2);
@@ -372,7 +393,7 @@ export default function Dashboard() {
                           ? '#34D399'
                           : d.value > 0
                           ? 'rgba(52,211,153,0.36)'
-                          : 'rgba(255,255,255,0.07)',
+                          : isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.07)',
                         shadowColor: isToday ? '#34D399' : undefined,
                         shadowOpacity: isToday ? 0.7 : 0,
                         shadowRadius: isToday ? 5 : 0,
@@ -383,7 +404,7 @@ export default function Dashboard() {
                   <Text
                     style={[
                       styles.heroSparkBarLabel,
-                      { color: isToday ? 'rgba(52,211,153,0.9)' : 'rgba(148,163,184,0.4)' },
+                      { color: isToday ? 'rgba(52,211,153,0.9)' : isLight ? C.textFaint : 'rgba(148,163,184,0.4)' },
                     ]}
                   >
                     {d.label}
@@ -407,7 +428,7 @@ export default function Dashboard() {
           </View>
           <View style={styles.insightText}>
             <Text style={[styles.insightValue, isDesktop && styles.insightValueDesktop]}>{txCount}</Text>
-            <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>Transaksione</Text>
+            <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>{t('dashInsightTransactions')}</Text>
           </View>
         </View>
 
@@ -419,9 +440,9 @@ export default function Dashboard() {
           </View>
           <View style={styles.insightText}>
             <Text style={[styles.insightValue, isDesktop && styles.insightValueDesktop]} numberOfLines={1}>
-              {formatCurrency(Math.round(avgDaily), 'ALL')}
+              {formatInPreferred(Math.round(avgDaily), state.preferredCurrency)}
             </Text>
-            <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>Mesatare/ditë</Text>
+            <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>{t('dashInsightAvgPerDay')}</Text>
           </View>
         </View>
 
@@ -434,9 +455,9 @@ export default function Dashboard() {
               </View>
               <View style={styles.insightText}>
                 <Text style={[styles.insightValue, isDesktop && styles.insightValueDesktop]} numberOfLines={1}>
-                  {biggestCat.name}
+                  {getCategoryName(biggestCat.id, lang)}
                 </Text>
-                <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>Kategoria kryesore</Text>
+                <Text style={[styles.insightLabel, isDesktop && styles.insightLabelDesktop]}>{t('dashInsightTopCat')}</Text>
               </View>
             </View>
           </>
@@ -454,11 +475,11 @@ export default function Dashboard() {
           <View style={styles.sectionTitleRow}>
             <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop, isBizMode && { backgroundColor: C.accentLight }]} />
             <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-              {isBizMode ? 'Sinjale biznesi' : 'Sinjale financiare'}
+              {isBizMode ? t('dashBizSignals') : t('dashFinancialSignals')}
             </Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/raporte' as any)}>
-            <Text style={styles.seeAll}>Shiko analizat →</Text>
+            <Text style={styles.seeAll}>{t('dashSeeAnalytics')}</Text>
           </TouchableOpacity>
         </View>
         <Card>
@@ -467,12 +488,12 @@ export default function Dashboard() {
               key={i}
               style={[
                 styles.siRow,
-                { borderLeftColor: siColor(insight.type) },
+                { borderLeftColor: siColor(C, insight.type) },
                 i < activeInsights.length - 1 && styles.siRowBorder,
               ]}
             >
-              <View style={[styles.siIcon, { backgroundColor: siBg(insight.type) }]}>
-                <Ionicons name={insight.icon as any} size={14} color={siColor(insight.type)} />
+              <View style={[styles.siIcon, { backgroundColor: siBg(C, insight.type) }]}>
+                <Ionicons name={insight.icon as any} size={14} color={siColor(C, insight.type)} />
               </View>
               <Text style={styles.siText}>{insight.text}</Text>
             </View>
@@ -487,8 +508,8 @@ export default function Dashboard() {
     <AnimatedSection delay={180}>
       <View style={[styles.statsRow, isDesktop && styles.statsRowDesktop]}>
         <StatCard
-          label="Sot"
-          value={formatCurrency(todayALL, 'ALL')}
+          label={t('dashToday')}
+          value={formatInPreferred(todayALL, state.preferredCurrency)}
           icon="today-outline"
           iconColor={C.accentLight}
           iconBg={C.accentBg}
@@ -496,8 +517,8 @@ export default function Dashboard() {
           large={isDesktop}
         />
         <StatCard
-          label="Kjo javë"
-          value={formatCurrency(weekALL, 'ALL')}
+          label={t('dashWeek')}
+          value={formatInPreferred(weekALL, state.preferredCurrency)}
           icon="calendar-outline"
           iconColor={C.primaryLight}
           iconBg={C.primaryBg}
@@ -506,8 +527,8 @@ export default function Dashboard() {
           large={isDesktop}
         />
         <StatCard
-          label="Ky muaj"
-          value={formatCurrency(monthALL, 'ALL')}
+          label={t('dashMonth')}
+          value={formatInPreferred(monthALL, state.preferredCurrency)}
           icon="trending-down-outline"
           iconColor={overWarning ? C.warning : C.textSub}
           iconBg={overWarning ? C.warningBgSubtle : C.elevated}
@@ -525,19 +546,19 @@ export default function Dashboard() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop, { backgroundColor: C.accentLight }]} />
-            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>Dashboard Biznesi</Text>
+            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>{t('dashBizDashboard')}</Text>
           </View>
           <View style={styles.bizBadge}>
             <Ionicons name="briefcase-outline" size={10} color={C.accentLight} />
-            <Text style={styles.bizBadgeText}>BIZ</Text>
+            <Text style={styles.bizBadgeText}>{t('dashBizBadgeHeader')}</Text>
           </View>
         </View>
         <View style={[styles.bizKpiGrid, isDesktop && styles.bizKpiGridDesktop]}>
           {([
-            { label: 'Shpenzime biznesi\nkëtë muaj', value: formatCurrency(Math.round(bizMonthTotal), 'ALL'), icon: 'trending-down-outline', color: C.accentLight, bg: C.accentBg, border: C.accentBorder },
-            { label: 'Furnitorë /\nInventar', value: formatCurrency(Math.round(bizFurnitorInvTotal), 'ALL'), icon: 'cube-outline', color: '#6366F1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.28)' },
-            { label: 'Kosto\noperative', value: formatCurrency(Math.round(bizOpCostTotal), 'ALL'), icon: 'business-outline', color: '#06B6D4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.28)' },
-            { label: 'Taksa /\nshërbime', value: formatCurrency(Math.round(bizTaxServiceTotal), 'ALL'), icon: 'calculator-outline', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
+            { label: t('dashBizMonthExpenses'), value: formatInPreferred(Math.round(bizMonthTotal), state.preferredCurrency), icon: 'trending-down-outline', color: C.accentLight, bg: C.accentBg, border: C.accentBorder },
+            { label: t('dashSupplierInventory'), value: formatInPreferred(Math.round(bizFurnitorInvTotal), state.preferredCurrency), icon: 'cube-outline', color: '#6366F1', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.28)' },
+            { label: t('dashOpCosts'), value: formatInPreferred(Math.round(bizOpCostTotal), state.preferredCurrency), icon: 'business-outline', color: '#06B6D4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.28)' },
+            { label: t('dashTaxService'), value: formatInPreferred(Math.round(bizTaxServiceTotal), state.preferredCurrency), icon: 'calculator-outline', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
           ] as const).map((kpi, idx) => (
             <View key={idx} style={[styles.bizKpiCard, isDesktop && styles.bizKpiCardDesktop]}>
               <LinearGradient
@@ -567,10 +588,10 @@ export default function Dashboard() {
         <View style={styles.budgetHeader}>
           <View style={{ gap: 3 }}>
             <Text style={[styles.budgetTitle, isDesktop && styles.budgetTitleDesktop]}>
-              {isBizMode ? 'Buxheti i Biznesit' : 'Buxheti Mujor'}
+              {isBizMode ? t('dashBizBudget') : t('dashMonthlyBudget')}
             </Text>
             <Text style={[styles.budgetSub, isDesktop && styles.budgetSubDesktop]}>
-              {formatCurrency(monthALL, 'ALL')} nga {formatCurrency(budget.monthly, 'ALL')}
+              {formatInPreferred(monthALL, state.preferredCurrency)} {t('dashOf')} {formatInPreferred(budget.monthly, state.preferredCurrency)}
             </Text>
           </View>
           <Pressable
@@ -582,7 +603,7 @@ export default function Dashboard() {
             ]}
           >
             <Ionicons name="pencil" size={12} color={C.textSub} />
-            <Text style={styles.budgetEditText}>Ndrysho</Text>
+            <Text style={styles.budgetEditText}>{t('dashEditBtn')}</Text>
           </Pressable>
         </View>
 
@@ -654,8 +675,8 @@ export default function Dashboard() {
             />
             <Text style={[styles.warningText, { color: overBudget ? C.danger : C.warning }]}>
               {overBudget
-                ? 'Ke tejkaluar buxhetin!'
-                : `${(100 - budgetPct).toFixed(0)}% e buxhetit mbetet`}
+                ? t('dashBudgetExceeded')
+                : `${(100 - budgetPct).toFixed(0)}% ${t('budRemaining').toLowerCase()}`}
             </Text>
           </View>
         )}
@@ -670,9 +691,9 @@ export default function Dashboard() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop]} />
-            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>Trendi Mujor</Text>
+            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>{t('dashMonthlyTrend')}</Text>
           </View>
-          <Text style={styles.trendSubLabel}>6 muajt e fundit</Text>
+          <Text style={styles.trendSubLabel}>{t('dashLast6Months')}</Text>
         </View>
         <Card style={isDesktop ? styles.trendCardDesktop : undefined}>
           <View style={[styles.trendChart, { height: isDesktop ? 96 : 72 }]}>
@@ -703,18 +724,18 @@ export default function Dashboard() {
           </View>
           <View style={styles.trendFooter}>
             <Text style={styles.trendFooterText}>
-              {'Mesatare: '}
-              {formatCurrency(
+              {`${t('dashAverage')}: `}
+              {formatInPreferred(
                 Math.round(
                   monthlyTrendData.reduce((s, d) => s + d.value, 0) /
                     (monthlyTrendData.filter((d) => d.value > 0).length || 1)
                 ),
-                'ALL'
+                state.preferredCurrency
               )}
-              {'/muaj'}
+              {t('dashPerMonth')}
             </Text>
             <Text style={[styles.trendFooterAccent, { color: isOnTrack ? C.primaryLight : C.warning }]}>
-              {isOnTrack ? '↑ Brenda buxhetit' : '↓ Mbi buxhetin'}
+              {isOnTrack ? t('dashOnTrack') : t('dashOverBudget')}
             </Text>
           </View>
         </Card>
@@ -728,9 +749,9 @@ export default function Dashboard() {
       <Card style={isDesktop ? styles.goalCardDesktop : undefined}>
         <View style={styles.goalHeader}>
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={[styles.goalTitle, isDesktop && styles.goalTitleDesktop]}>Parashikimi Mujor</Text>
+            <Text style={[styles.goalTitle, isDesktop && styles.goalTitleDesktop]}>{t('dashMonthlyForecast')}</Text>
             <Text style={styles.goalSub}>
-              {daysElapsed} ditë të kaluara · {daysRemaining} mbeten
+              {daysElapsed} {t('dashDaysElapsed')} · {daysRemaining} {t('dashDaysRemain')}
             </Text>
           </View>
           <View
@@ -744,7 +765,7 @@ export default function Dashboard() {
           >
             <View style={[styles.goalStatusDot, { backgroundColor: isOnTrack ? C.primary : C.warning }]} />
             <Text style={[styles.goalStatusText, { color: isOnTrack ? C.primaryLight : C.warning }]}>
-              {isOnTrack ? 'Në rrugë' : 'Risk tejkalimi'}
+              {isOnTrack ? t('dashOnTrackStatus') : t('dashOverrunRisk')}
             </Text>
           </View>
         </View>
@@ -755,9 +776,9 @@ export default function Dashboard() {
               style={[styles.goalMetricValue, isDesktop && styles.goalMetricValueDesktop]}
               numberOfLines={1}
             >
-              {formatCurrency(Math.round(projectedMonthly), 'ALL')}
+              {formatInPreferred(Math.round(projectedMonthly), state.preferredCurrency)}
             </Text>
-            <Text style={styles.goalMetricLabel}>Parashikim</Text>
+            <Text style={styles.goalMetricLabel}>{t('dashForecast')}</Text>
           </View>
           <View style={styles.goalMetricDivider} />
           <View style={styles.goalMetric}>
@@ -769,9 +790,9 @@ export default function Dashboard() {
               ]}
               numberOfLines={1}
             >
-              {formatCurrency(Math.round(dailyLimitRemaining), 'ALL')}
+              {formatInPreferred(Math.round(dailyLimitRemaining), state.preferredCurrency)}
             </Text>
-            <Text style={styles.goalMetricLabel}>Limit/ditë</Text>
+            <Text style={styles.goalMetricLabel}>{t('dashDailyLimit')}</Text>
           </View>
         </View>
 
@@ -793,11 +814,11 @@ export default function Dashboard() {
           />
         </View>
         <View style={styles.goalProgLabels}>
-          <Text style={styles.goalProgLabel}>0 L</Text>
+          <Text style={styles.goalProgLabel}>0</Text>
           <Text style={[styles.goalProgLabel, { color: isOnTrack ? C.primaryLight : C.warning }]}>
-            {((projectedMonthly / (budget.monthly || 1)) * 100).toFixed(0)}% i parashikuar
+            {((projectedMonthly / (budget.monthly || 1)) * 100).toFixed(0)}% {t('dashForecast').toLowerCase()}
           </Text>
-          <Text style={styles.goalProgLabel}>{formatCurrency(budget.monthly, 'ALL')}</Text>
+          <Text style={styles.goalProgLabel}>{formatInPreferred(budget.monthly, state.preferredCurrency)}</Text>
         </View>
       </Card>
     </AnimatedSection>
@@ -813,11 +834,11 @@ export default function Dashboard() {
             <View style={styles.sectionTitleRow}>
               <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop, isBizMode && { backgroundColor: C.accentLight }]} />
               <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-                {isBizMode ? 'Kategoritë e biznesit' : 'Kategoritë kryesore'}
+                {isBizMode ? t('dashBizCategories') : t('dashTopCats')}
               </Text>
             </View>
             <TouchableOpacity onPress={() => router.push('/raporte' as any)}>
-              <Text style={styles.seeAll}>Shiko →</Text>
+              <Text style={styles.seeAll}>{t('dashViewAll')} →</Text>
             </TouchableOpacity>
           </View>
 
@@ -838,13 +859,13 @@ export default function Dashboard() {
                     </View>
                     <View style={styles.catDetails}>
                       <View style={styles.catTopRow}>
-                        <Text style={[styles.catName, isDesktop && styles.catNameDesktop]}>{info.name}</Text>
+                        <Text style={[styles.catName, isDesktop && styles.catNameDesktop]}>{getCategoryName(info.id, lang)}</Text>
                         <View style={styles.catRight}>
                           <Text style={[styles.catPct, { color: info.color }]}>
                             {cat.percent.toFixed(0)}%
                           </Text>
                           <Text style={[styles.catAmount, isDesktop && styles.catAmountDesktop]}>
-                            {formatCurrency(cat.total, 'ALL')}
+                            {formatInPreferred(cat.total, state.preferredCurrency)}
                           </Text>
                         </View>
                       </View>
@@ -881,11 +902,11 @@ export default function Dashboard() {
           <View style={styles.sectionTitleRow}>
             <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop, isBizMode && { backgroundColor: C.accentLight }]} />
             <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-              {isBizMode ? 'Transaksionet e biznesit' : 'Transaksionet e fundit'}
+              {isBizMode ? t('dashBizTransactions') : t('dashRecent')}
             </Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/historia' as any)}>
-            <Text style={styles.seeAll}>Shiko të gjitha →</Text>
+            <Text style={styles.seeAll}>{t('dashViewAll')} →</Text>
           </TouchableOpacity>
         </View>
 
@@ -901,10 +922,10 @@ export default function Dashboard() {
                 <Ionicons name={isBizMode ? 'briefcase-outline' : 'receipt-outline'} size={30} color={isBizMode ? C.accentLight : C.primary} />
               </LinearGradient>
               <Text style={styles.emptyTitle}>
-                {isBizMode ? 'Asnjë shpenzim biznesi' : 'Nuk ka transaksione akoma'}
+                {isBizMode ? t('dashNoBizExpenses') : t('dashNoTransactions')}
               </Text>
               <Text style={styles.emptySub}>
-                {isBizMode ? 'Shto shpenzimin e parë të biznesit' : 'Shto shpenzimin tënd të parë'}
+                {isBizMode ? t('dashAddFirstBizExpense') : t('dashAddFirstExpense')}
               </Text>
               <TouchableOpacity
                 style={[styles.emptyAction, isBizMode && { shadowColor: C.accent }]}
@@ -919,7 +940,7 @@ export default function Dashboard() {
                 >
                   <Ionicons name="add" size={16} color={C.white} />
                   <Text style={styles.emptyActionText}>
-                    {isBizMode ? 'Shto shpenzim biznesi' : 'Shto shpenzim'}
+                    {isBizMode ? t('dashAddBizExpenseBtn') : t('dashAddExpenseBtn')}
                   </Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -952,18 +973,18 @@ export default function Dashboard() {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
             <View style={[styles.sectionAccent, isDesktop && styles.sectionAccentDesktop, { backgroundColor: C.accentLight }]} />
-            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>Raporte biznesi</Text>
+            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>{t('dashBizReports')}</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/raporte' as any)}>
-            <Text style={[styles.seeAll, { color: C.accentLight }]}>Hap →</Text>
+            <Text style={[styles.seeAll, { color: C.accentLight }]}>{t('open')}</Text>
           </TouchableOpacity>
         </View>
         <Card style={isDesktop ? { padding: 22 } : undefined}>
           <View style={{ gap: 14 }}>
             {([
-              { icon: 'bar-chart-outline', label: 'Analiza e shpenzimeve', sub: 'Shpenzimet sipas kategorive', color: C.accentLight, bg: C.accentBg, border: C.accentBorder },
-              { icon: 'trending-down-outline', label: 'Trendi mujor', sub: '6 muajt e fundit të biznesit', color: '#06B6D4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.28)' },
-              { icon: 'calculator-outline', label: 'Taksa & shërbime', sub: 'Kostot operative këtë muaj', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
+              { icon: 'bar-chart-outline', label: t('dashBizExpenseAnalysis'), sub: t('dashBizExpenseAnalysisSub'), color: C.accentLight, bg: C.accentBg, border: C.accentBorder },
+              { icon: 'trending-down-outline', label: t('dashMonthlyTrendSub'), sub: t('dashBizLast6MonthsSub'), color: '#06B6D4', bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.28)' },
+              { icon: 'calculator-outline', label: t('dashTaxServiceTitle'), sub: t('dashTaxServiceSub'), color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.28)' },
             ] as const).map((item, idx) => (
               <TouchableOpacity
                 key={idx}
@@ -998,13 +1019,13 @@ export default function Dashboard() {
           end={{ x: 1, y: 1 }}
         />
 
-        <Text style={styles.wcHeading}>Si funksionon Valuta</Text>
+        <Text style={styles.wcHeading}>{t('dashHowItWorks')}</Text>
 
         <View style={styles.wcSteps}>
           {([
-            { icon: 'add-circle-outline', title: 'Regjistro shpenzimet', sub: 'Shto çdo shpenzim me kategorinë dhe datën', iconBg: C.primaryBg, iconBorder: C.primaryBorder, iconColor: C.primary },
-            { icon: 'wallet-outline', title: 'Vendos buxhetin', sub: 'Cakto limit mujor dhe gjurmo progresin', iconBg: C.accentBg, iconBorder: C.accentBorder, iconColor: C.accentLight },
-            { icon: 'bar-chart-outline', title: 'Eksploro analizat', sub: 'Kuptoji zakonet tuaja financiare', iconBg: C.warningBgSubtle, iconBorder: C.warningBorder, iconColor: C.warning },
+            { icon: 'add-circle-outline', title: t('dashStep1Title'), sub: t('dashStep1Sub'), iconBg: C.primaryBg, iconBorder: C.primaryBorder, iconColor: C.primary },
+            { icon: 'wallet-outline', title: t('dashStep2Title'), sub: t('dashStep2Sub'), iconBg: C.accentBg, iconBorder: C.accentBorder, iconColor: C.accentLight },
+            { icon: 'bar-chart-outline', title: t('dashStep3Title'), sub: t('dashStep3Sub'), iconBg: C.warningBgSubtle, iconBorder: C.warningBorder, iconColor: C.warning },
           ] as const).map((step, i) => (
             <View key={step.icon}>
               <View style={styles.wcStep}>
@@ -1033,7 +1054,7 @@ export default function Dashboard() {
             end={{ x: 1, y: 0 }}
           >
             <Ionicons name="add" size={18} color={C.white} />
-            <Text style={styles.wcBtnText}>Shto shpenzimin e parë</Text>
+            <Text style={styles.wcBtnText}>{t('dashAddFirstExpenseBtn')}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -1043,7 +1064,7 @@ export default function Dashboard() {
           activeOpacity={0.78}
         >
           <Ionicons name="wallet-outline" size={14} color={C.primary} />
-          <Text style={styles.wcSecondaryText}>Vendos buxhetin tënd →</Text>
+          <Text style={styles.wcSecondaryText}>{t('dashSetBudgetBtn')}</Text>
         </TouchableOpacity>
       </View>
     </AnimatedSection>
@@ -1060,13 +1081,13 @@ export default function Dashboard() {
         <AnimatedSection delay={0}>
           <View style={styles.headerRow}>
             <View>
-              <Text style={[styles.greeting, isDesktop && styles.greetingDesktop]}>{getGreeting()}</Text>
+              <Text style={[styles.greeting, isDesktop && styles.greetingDesktop]}>{getGreeting(lang)}</Text>
               <View style={styles.nameRow}>
                 <Text style={[styles.name, isDesktop && styles.nameDesktop]}>{displayName}</Text>
                 {isBizMode && (
                   <View style={styles.headerBizBadge}>
                     <Ionicons name="briefcase-outline" size={9} color={C.accentLight} />
-                    <Text style={styles.headerBizBadgeText}>BIZNES</Text>
+                    <Text style={styles.headerBizBadgeText}>{t('dashBizBadge')}</Text>
                   </View>
                 )}
               </View>
@@ -1079,6 +1100,7 @@ export default function Dashboard() {
                   hovered && styles.iconBtnHovered,
                   pressed && { opacity: 0.7 },
                 ]}
+                onPress={() => setShowNotifCenter(true)}
               >
                 <Ionicons name="notifications-outline" size={isDesktop ? 22 : 20} color={C.textSub} />
               </Pressable>
@@ -1136,11 +1158,116 @@ export default function Dashboard() {
         <View style={{ height: isMobile ? 100 : 24 }} />
       </ScrollView>
 
+      {/* Notification Center Modal */}
+      <Modal
+        visible={showNotifCenter}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNotifCenter(false)}
+      >
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifBox}>
+            <LinearGradient
+              colors={['rgba(59,130,246,0.06)', 'transparent']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+            />
+            <View style={styles.notifTopEdge} />
+            <View style={styles.notifHeader}>
+              <View style={styles.notifTitleRow}>
+                <View style={styles.notifTitleIcon}>
+                  <Ionicons name="notifications-outline" size={15} color={C.accentLight} />
+                </View>
+                <Text style={styles.notifTitle}>{t('dashNotifTitle')}</Text>
+              </View>
+              <Pressable onPress={() => setShowNotifCenter(false)} style={styles.notifClose}>
+                <Ionicons name="close" size={18} color={C.textMuted} />
+              </Pressable>
+            </View>
+
+            {(() => {
+              const allPending = computePendingNotifications(expenses, budget, prefs, state.preferredCurrency);
+              const pending = allPending.filter((n) => !centerDismissed.has(n.id));
+
+              const allSubReminders = prefs.enabled && state.recurringSettings.reminderEnabled
+                ? state.subscriptions.filter((s) => {
+                    if (!s.isActive) return false;
+                    const days = Math.floor(
+                      (new Date(s.nextPaymentDate).getTime() - Date.now()) / 86400000
+                    );
+                    return days >= 0 && days <= state.recurringSettings.reminderDaysBefore;
+                  })
+                : [];
+              const subReminders = allSubReminders.filter((s) => !centerDismissed.has(`sub_${s.id}`));
+
+              if (pending.length === 0 && subReminders.length === 0) {
+                return (
+                  <View style={styles.notifEmpty}>
+                    <View style={styles.notifEmptyIcon}>
+                      <Ionicons name="checkmark-circle-outline" size={28} color={C.primary} />
+                    </View>
+                    <Text style={styles.notifEmptyText}>{t('noNotifs')}</Text>
+                    <Text style={styles.notifEmptySub}>{t('allGood')}</Text>
+                  </View>
+                );
+              }
+
+              return (
+                <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                  <View style={styles.notifList}>
+                    {pending.map((n) => {
+                      const color = n.severity === 'critical' ? C.danger : n.severity === 'warning' ? C.warning : C.accentLight;
+                      const bg = n.severity === 'critical' ? C.dangerBgSubtle : n.severity === 'warning' ? C.warningBgSubtle : C.accentBgSubtle;
+                      const border = n.severity === 'critical' ? C.dangerBorder : n.severity === 'warning' ? C.warningBorder : C.accentBorder;
+                      return (
+                        <View key={n.id} style={[styles.notifItem, { borderColor: border, backgroundColor: bg }]}>
+                          <View style={[styles.notifItemIcon, { backgroundColor: bg }]}>
+                            <Ionicons name={n.icon as any} size={14} color={color} />
+                          </View>
+                          <View style={{ flex: 1, gap: 2 }}>
+                            <Text style={[styles.notifItemTitle, { color }]}>{n.title}</Text>
+                            <Text style={styles.notifItemBody}>{n.body}</Text>
+                          </View>
+                          <Pressable
+                            onPress={() => dismissCenterItem(n.id)}
+                            style={({ pressed }) => [styles.notifDismissBtn, pressed && { opacity: 0.6 }]}
+                          >
+                            <Ionicons name="close" size={12} color={C.textMuted} />
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                    {subReminders.map((s) => (
+                      <View key={s.id} style={[styles.notifItem, { borderColor: C.primaryBorder, backgroundColor: C.primaryBgSubtle }]}>
+                        <View style={[styles.notifItemIcon, { backgroundColor: C.primaryBgSubtle }]}>
+                          <Ionicons name="repeat-outline" size={14} color={C.primary} />
+                        </View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text style={[styles.notifItemTitle, { color: C.primary }]}>{t('dashNotifUpcoming')}</Text>
+                          <Text style={styles.notifItemBody}>{s.name} — {s.nextPaymentDate}</Text>
+                        </View>
+                        <Pressable
+                          onPress={() => dismissCenterItem(`sub_${s.id}`)}
+                          style={({ pressed }) => [styles.notifDismissBtn, pressed && { opacity: 0.6 }]}
+                        >
+                          <Ionicons name="close" size={12} color={C.textMuted} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette, isLight: boolean) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, gap: 18 },
   contentDesktop: { paddingHorizontal: 32, maxWidth: 1680 as any, alignSelf: 'center' as any, width: '100%' as any, gap: 26, paddingTop: 18 },
@@ -1222,13 +1349,13 @@ const styles = StyleSheet.create({
     padding: 22,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.22)',
+    borderColor: isLight ? C.border : 'rgba(59,130,246,0.22)',
     position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.42,
+    shadowOpacity: isLight ? 0.08 : 0.42,
     shadowRadius: 26,
-    elevation: 14,
+    elevation: isLight ? 3 : 14,
   },
   heroGlow1: {
     position: 'absolute', top: -50, right: -30,
@@ -1247,11 +1374,11 @@ const styles = StyleSheet.create({
   },
   heroShimmerLine: {
     position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.13)',
+    backgroundColor: isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.13)',
   },
   heroLabel: {
     fontSize: 11,
-    color: 'rgba(148,163,184,0.75)',
+    color: isLight ? C.textMuted : 'rgba(148,163,184,0.75)',
     marginBottom: 8,
     fontWeight: '600',
     letterSpacing: 0.6,
@@ -1274,12 +1401,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: isLight ? C.elevated : 'rgba(255,255,255,0.07)',
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: isLight ? C.border : 'rgba(255,255,255,0.10)',
   },
   heroDot: { width: 6, height: 6, borderRadius: 3 },
   heroBadgeText: { fontSize: 13, fontWeight: '600' },
@@ -1290,12 +1417,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingTop: 13,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.07)',
+    borderTopColor: isLight ? C.border : 'rgba(255,255,255,0.07)',
     gap: 8,
   },
   heroSparklineHeading: {
     fontSize: 9,
-    color: 'rgba(148,163,184,0.5)',
+    color: isLight ? C.textMuted : 'rgba(148,163,184,0.5)',
     fontWeight: '700',
     letterSpacing: 0.7,
     textTransform: 'uppercase',
@@ -1942,4 +2069,142 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   bizKpiLabelDesktop: { fontSize: 11, lineHeight: 16 },
-});
+
+  // ── Notification center modal ─────────────────────────────
+  notifOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 90,
+    paddingRight: 16,
+  },
+  notifBox: {
+    width: 320,
+    maxWidth: '94%' as any,
+    backgroundColor: C.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.accentBorder,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.55,
+    shadowRadius: 30,
+    elevation: 18,
+  },
+  notifTopEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(96,165,250,0.35)',
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  notifTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifTitleIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: C.accentBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.accentBorder,
+  },
+  notifTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.text,
+    letterSpacing: -0.2,
+  },
+  notifClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: C.elevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notifEmpty: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  notifEmptyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: C.primaryBgSubtle,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.primaryBorder,
+    marginBottom: 4,
+  },
+  notifEmptyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.textSub,
+    textAlign: 'center' as any,
+  },
+  notifEmptySub: {
+    fontSize: 12,
+    color: C.textMuted,
+    textAlign: 'center' as any,
+  },
+  notifList: {
+    paddingHorizontal: 12,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  notifItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  notifItemIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  notifItemTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  notifItemBody: {
+    fontSize: 12,
+    color: C.textMuted,
+    lineHeight: 16,
+  },
+  notifDismissBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: C.elevated,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  });
+}

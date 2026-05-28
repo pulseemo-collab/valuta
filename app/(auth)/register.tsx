@@ -16,14 +16,22 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { C, GRADIENTS } from '@/constants/colors';
 import { signUp, toAlbanianError } from '@/lib/auth';
+import { supabaseConfigMissing } from '@/lib/supabase';
+import { useTranslation } from '@/lib/i18n';
 
 export default function Register() {
+  const { t, lang } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    // Show immediately on native if Supabase env vars were not baked into the build
+    () => supabaseConfigMissing && Platform.OS !== 'web'
+      ? 'Konfigurimi i Supabase mungon në build-in Android.'
+      : ''
+  );
   const [success, setSuccess] = useState(false);
   const router = useRouter();
 
@@ -31,11 +39,11 @@ export default function Register() {
     setError('');
 
     if (!email.trim() || !password) {
-      setError('Ju lutem plotësoni emailin dhe fjalëkalimin.');
+      setError(t('authFillFields'));
       return;
     }
     if (password.length < 6) {
-      setError('Fjalëkalimi duhet të ketë të paktën 6 karaktere.');
+      setError(lang === 'en' ? 'Password must be at least 6 characters.' : 'Fjalëkalimi duhet të ketë të paktën 6 karaktere.');
       return;
     }
 
@@ -74,17 +82,17 @@ export default function Register() {
                       <Ionicons name="mail-unread-outline" size={36} color={C.white} />
                     </LinearGradient>
                   </View>
-                  <Text style={styles.successTitle}>Kontrollo emailin!</Text>
+                  <Text style={styles.successTitle}>{t('authCheckEmail')}</Text>
                   <Text style={styles.successDesc}>
-                    Të dërguam një link konfirmimi tek{'\n'}
+                    {lang === 'en' ? 'We sent a confirmation link to' : 'Të dërguam një link konfirmimi tek'}{'\n'}
                     <Text style={styles.successEmail}>{email.trim()}</Text>
-                    {'\n\n'}Konfirmo emailin tënd për të aktivizuar llogarinë.
+                    {'\n\n'}{t('authConfirmSent')}
                   </Text>
                   <TouchableOpacity
                     style={styles.backToLoginBtn}
                     onPress={() => router.replace('/(auth)/login')}
                   >
-                    <Text style={styles.backToLoginText}>Kthehu tek hyrja</Text>
+                    <Text style={styles.backToLoginText}>{t('authBackToLogin')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -124,25 +132,25 @@ export default function Register() {
                   >
                     <Text style={styles.logoLetter}>V</Text>
                   </LinearGradient>
-                  <Text style={styles.title}>Krijo Llogari</Text>
-                  <Text style={styles.subtitle}>Nis udhëtimin tënd financiar me Valuta</Text>
+                  <Text style={styles.title}>{t('authRegTitle')}</Text>
+                  <Text style={styles.subtitle}>{t('authRegSub')}</Text>
                 </View>
 
                 <View style={styles.form}>
                   <Input
-                    label="Emri i plotë"
+                    label={t('authFullName')}
                     placeholder="Andi Kelmendi"
                     value={name}
-                    onChangeText={(t) => { setName(t); setError(''); }}
+                    onChangeText={(v) => { setName(v); setError(''); }}
                     autoCapitalize="words"
                     leftIcon={<Ionicons name="person-outline" size={18} color={C.textMuted} />}
                   />
 
                   <Input
-                    label="Email"
+                    label={t('authEmail')}
                     placeholder="emri@shembull.al"
                     value={email}
-                    onChangeText={(t) => { setEmail(t); setError(''); }}
+                    onChangeText={(v) => { setEmail(v); setError(''); }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -150,10 +158,10 @@ export default function Register() {
                   />
 
                   <Input
-                    label="Fjalëkalimi"
-                    placeholder="Minimum 6 karaktere"
+                    label={t('authPassword')}
+                    placeholder={lang === 'en' ? 'Minimum 6 characters' : 'Minimum 6 karaktere'}
                     value={password}
-                    onChangeText={(t) => { setPassword(t); setError(''); }}
+                    onChangeText={(v) => { setPassword(v); setError(''); }}
                     secureTextEntry={!showPass}
                     leftIcon={<Ionicons name="lock-closed-outline" size={18} color={C.textMuted} />}
                     rightIcon={
@@ -164,7 +172,7 @@ export default function Register() {
                       />
                     }
                     onRightIconPress={() => setShowPass(!showPass)}
-                    hint="Të paktën 6 karaktere"
+                    hint={lang === 'en' ? 'At least 6 characters' : 'Të paktën 6 karaktere'}
                   />
 
                   {error ? (
@@ -177,23 +185,23 @@ export default function Register() {
                   <View style={styles.terms}>
                     <Ionicons name="information-circle-outline" size={15} color={C.textMuted} />
                     <Text style={styles.termsText}>
-                      Duke u regjistruar, pranon{' '}
-                      <Text style={styles.termsLink}>Kushtet e Shërbimit</Text>
-                      {' '}dhe{' '}
-                      <Text style={styles.termsLink}>Politikën e Privatësisë</Text>
+                      {t('authAcceptTerms')}{' '}
+                      <Text style={styles.termsLink}>{t('authTermsLink')}</Text>
+                      {lang === 'en' ? ' and ' : ' dhe '}{' '}
+                      <Text style={styles.termsLink}>{t('authPrivacyLink')}</Text>
                     </Text>
                   </View>
 
                   <Button onPress={handleRegister} size="lg" fullWidth loading={loading}>
-                    Regjistrohu
+                    {t('authRegisterBtn')}
                   </Button>
                 </View>
               </View>
 
               <View style={styles.loginRow}>
-                <Text style={styles.loginText}>Ke llogari? </Text>
+                <Text style={styles.loginText}>{t('authHasAccount').split('?')[0]}? </Text>
                 <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                  <Text style={styles.loginLink}>Hyr</Text>
+                  <Text style={styles.loginLink}>{t('authLoginBtn')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

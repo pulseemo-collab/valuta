@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AppState, AppAction, Currency, Expense, Budget, AppMode, UserPlan, Subscription, RecurringSettings, FinancialGoal } from '@/types';
+import type { AppState, AppAction, Currency, Expense, Budget, AppMode, UserPlan, Subscription, RecurringSettings, FinancialGoal, AppTheme, AppLanguage } from '@/types';
 import { convertToALL } from '@/constants/currencies';
+import { initRates } from '@/lib/exchangeRates';
 import { generateId } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { fetchExpenses, insertExpense, removeExpense, fetchBudget, upsertBudget } from '@/lib/db';
@@ -34,6 +35,9 @@ const initialState: AppState = {
   subscriptions: [],
   recurringSettings: DEFAULT_RECURRING_SETTINGS,
   goals: [],
+  theme: 'dark',
+  language: 'sq',
+  lastSyncTime: null,
 };
 
 function reducer(state: AppState, action: AppAction): AppState {
@@ -102,6 +106,12 @@ function reducer(state: AppState, action: AppAction): AppState {
       };
     case 'REMOVE_GOAL':
       return { ...state, goals: state.goals.filter((g) => g.id !== action.payload) };
+    case 'SET_THEME':
+      return { ...state, theme: action.payload };
+    case 'SET_LANGUAGE':
+      return { ...state, language: action.payload };
+    case 'SET_LAST_SYNC_TIME':
+      return { ...state, lastSyncTime: action.payload };
     case 'HYDRATE': {
       const merged = { ...state, ...action.payload };
       // Backward compat: existing users have no plan in storage — derive from mode
@@ -116,6 +126,15 @@ function reducer(state: AppState, action: AppAction): AppState {
       }
       if (!merged.goals) {
         merged.goals = [];
+      }
+      if (!merged.theme) {
+        merged.theme = 'dark';
+      }
+      if (!merged.language) {
+        merged.language = 'sq';
+      }
+      if (merged.lastSyncTime === undefined) {
+        merged.lastSyncTime = null;
       }
       return merged;
     }
@@ -145,6 +164,10 @@ interface StoreContextType {
   addGoal: (goal: FinancialGoal) => void;
   updateGoal: (id: string, updates: Partial<FinancialGoal>) => void;
   removeGoal: (id: string) => void;
+  setTheme: (theme: AppTheme) => void;
+  setLanguage: (lang: AppLanguage) => void;
+  syncNow: () => Promise<void>;
+  setUserName: (name: string) => void;
 }
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -157,6 +180,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncingRef = useRef(false);
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // ── Fetch exchange rates on mount (best-effort, never throws) ──────────────
+  useEffect(() => {
+    initRates().catch(() => {});
+  }, []);
 
   // ── Load from AsyncStorage on mount ────────────────────────────────────────
   useEffect(() => {
@@ -209,30 +237,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const userId = session?.user?.id ?? null;
-      const email = session?.user?.email ?? null;
-      const name = (session?.user?.user_metadata?.display_name as string | undefined) ?? null;
+    let sub: { unsubscribe: () => void } | null = null;
+    try {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        try {
+          const userId = session?.user?.id ?? null;
+          const email = session?.user?.email ?? null;
+          const name = (session?.user?.user_metadata?.display_name as string | undefined) ?? null;
 
-      if (__DEV__) console.log('[Store] Auth event:', event, '| userId:', userId ? userId.slice(0, 8) + '…' : 'null');
+          if (__DEV__) console.log('[Store] Auth event:', event, '| userId:', userId ? userId.slice(0, 8) + '…' : 'null');
 
-      userIdRef.current = userId;
-      dispatch({ type: 'SET_SUPABASE_USER', payload: userId });
-      dispatch({ type: 'SET_USER_EMAIL', payload: email });
-      dispatch({ type: 'SET_USER_NAME', payload: name });
-      dispatch({ type: 'SET_LOGGED_IN', payload: !!userId });
+          userIdRef.current = userId;
+          dispatch({ type: 'SET_SUPABASE_USER', payload: userId });
+          dispatch({ type: 'SET_USER_EMAIL', payload: email });
+          dispatch({ type: 'SET_USER_NAME', payload: name });
+          dispatch({ type: 'SET_LOGGED_IN', payload: !!userId });
 
-      if (event === 'INITIAL_SESSION') {
-        dispatch({ type: 'SET_AUTH_INITIALIZED' });
-        if (userId) handleUserSignIn(userId);
-      } else if (event === 'SIGNED_IN') {
-        if (userId) handleUserSignIn(userId);
-      } else if (event === 'SIGNED_OUT') {
-        dispatch({ type: 'CLEAR_USER_DATA' });
-      }
-    });
+          if (event === 'INITIAL_SESSION') {
+            dispatch({ type: 'SET_AUTH_INITIALIZED' });
+            if (userId) handleUserSignIn(userId);
+          } else if (event === 'SIGNED_IN') {
+            if (userId) handleUserSignIn(userId);
+          } else if (event === 'SIGNED_OUT') {
+            dispatch({ type: 'CLEAR_USER_DATA' });
+          }
+        } catch (callbackErr) {
+          console.error('[Store] Auth callback error:', callbackErr);
+          dispatch({ type: 'SET_AUTH_INITIALIZED' });
+        }
+      });
+      sub = subscription;
+    } catch (err) {
+      console.error('[Store] Supabase auth listener setup failed:', err);
+      // Ensure the app can render past the splash screen even with no auth
+      dispatch({ type: 'SET_AUTH_INITIALIZED' });
+    }
 
-    return () => subscription.unsubscribe();
+    return () => { sub?.unsubscribe(); };
   }, []);
 
   async function handleUserSignIn(userId: string) {
@@ -254,13 +295,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const localCount = stateRef.current.expenses.length;
       const shouldReplaceExpenses = expenses.length > 0 || localCount === 0;
 
+      // Recompute convertedALL using current rates (Supabase rows may lack it).
+      const recomputedExpenses = expenses.map((e) => ({
+        ...e,
+        convertedALL: convertToALL(e.amount, e.currency),
+      }));
+
       dispatch({
         type: 'HYDRATE',
         payload: {
-          ...(shouldReplaceExpenses ? { expenses } : {}),
+          ...(shouldReplaceExpenses ? { expenses: recomputedExpenses } : {}),
           ...(budget ? { budget } : {}),
         },
       });
+      dispatch({ type: 'SET_LAST_SYNC_TIME', payload: new Date().toISOString() });
     } catch (err) {
       console.error('[Store] handleUserSignIn failed:', err);
       dispatch({ type: 'SET_SAVE_ERROR', payload: 'Nuk u ngarkuan të dhënat. Kontrollo lidhjen.' });
@@ -360,6 +408,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateGoal = (id: string, updates: Partial<FinancialGoal>) =>
     dispatch({ type: 'UPDATE_GOAL', payload: { id, updates } });
   const removeGoal = (id: string) => dispatch({ type: 'REMOVE_GOAL', payload: id });
+  const setTheme = (theme: AppTheme) => dispatch({ type: 'SET_THEME', payload: theme });
+  const setLanguage = (lang: AppLanguage) => dispatch({ type: 'SET_LANGUAGE', payload: lang });
+  const setUserName = (name: string) => dispatch({ type: 'SET_USER_NAME', payload: name });
+
+  const syncNow = async (): Promise<void> => {
+    const uid = userIdRef.current;
+    if (!uid) throw new Error('Nuk je i kyçur.');
+    await handleUserSignIn(uid);
+  };
 
   const retrySync = () => {
     const uid = userIdRef.current;
@@ -369,7 +426,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <StoreContext.Provider
-      value={{ state, dispatch, addExpense, deleteExpense, setBudget, setCurrency, setMode, setModeSelected, setPlan, setOnboarded, setLoggedIn, clearSaveError, retrySync, addSubscription, removeSubscription, toggleSubscription, updateRecurringSettings, addGoal, updateGoal, removeGoal }}
+      value={{ state, dispatch, addExpense, deleteExpense, setBudget, setCurrency, setMode, setModeSelected, setPlan, setOnboarded, setLoggedIn, clearSaveError, retrySync, addSubscription, removeSubscription, toggleSubscription, updateRecurringSettings, addGoal, updateGoal, removeGoal, setTheme, setLanguage, syncNow, setUserName }}
     >
       {children}
     </StoreContext.Provider>

@@ -30,7 +30,6 @@
       },
       "package": "al.valuta.app",
       "versionCode": 1,
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",

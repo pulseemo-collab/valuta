@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '@/lib/store';
-import { C } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 
 interface Props {
   style?: ViewStyle;
@@ -10,6 +10,8 @@ interface Props {
 
 export function SyncingBanner({ style }: Props) {
   const { state, clearSaveError, retrySync } = useStore();
+  const C = useThemeColors();
+  const styles = useMemo(() => makeStyles(C), [C]);
 
   if (state.syncing) {
     return (
@@ -46,53 +48,55 @@ export function SyncingBanner({ style }: Props) {
   return null;
 }
 
-const styles = StyleSheet.create({
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  syncBanner: {
-    backgroundColor: C.primaryBg,
-    borderColor: C.primaryBorder,
-  },
-  errorBanner: {
-    backgroundColor: C.dangerBgSubtle,
-    borderColor: C.dangerBorder,
-  },
-  syncText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.primaryLight,
-  },
-  errorText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: C.danger,
-    lineHeight: 16,
-  },
-  retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 7,
-    backgroundColor: 'rgba(239,68,68,0.12)',
-    borderWidth: 1,
-    borderColor: C.dangerBorder,
-    flexShrink: 0,
-  },
-  retryText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.danger,
-  },
-});
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    banner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    syncBanner: {
+      backgroundColor: C.primaryBg,
+      borderColor: C.primaryBorder,
+    },
+    errorBanner: {
+      backgroundColor: C.dangerBgSubtle,
+      borderColor: C.dangerBorder,
+    },
+    syncText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: C.primaryLight,
+    },
+    errorText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: C.danger,
+      lineHeight: 16,
+    },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      borderRadius: 7,
+      backgroundColor: 'rgba(239,68,68,0.12)',
+      borderWidth: 1,
+      borderColor: C.dangerBorder,
+      flexShrink: 0,
+    },
+    retryText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: C.danger,
+    },
+  });
+}

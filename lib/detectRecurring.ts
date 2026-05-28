@@ -1,6 +1,7 @@
 import type { Expense, Currency, CategoryId } from '@/types';
 import type { InsightMessage } from '@/lib/utils';
-import { formatCurrency } from '@/lib/utils';
+import { formatInPreferred } from '@/lib/utils';
+import { convertToALL } from '@/constants/currencies';
 
 export type RecurringFrequency = 'daily' | 'weekly' | 'monthly' | 'irregular';
 export type RecurringConfidence = 'high' | 'medium' | 'low';
@@ -197,15 +198,30 @@ export function detectRecurring(expenses: Expense[]): RecurringPattern[] {
 
 // ── Utility exports ───────────────────────────────────────────────────────────
 
-export function getFrequencyLabel(f: RecurringFrequency): string {
+export function getFrequencyLabel(f: RecurringFrequency, lang = 'sq'): string {
+  if (lang === 'en') {
+    const EN: Record<RecurringFrequency, string> = {
+      daily: 'Every day', weekly: 'Every week', monthly: 'Every month', irregular: 'Often',
+    };
+    return EN[f];
+  }
   return FREQUENCY_LABELS[f];
 }
 
-export function getNextLabel(nextExpected: string | null): string {
+export function getNextLabel(nextExpected: string | null, lang = 'sq'): string {
   if (!nextExpected) return '';
   const diffDays = Math.round(
     (new Date(nextExpected).getTime() - Date.now()) / 86_400_000
   );
+  if (lang === 'en') {
+    if (diffDays < -1) return 'Overdue';
+    if (diffDays < 0) return 'Yesterday';
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays <= 6) return `In ${diffDays} days`;
+    if (diffDays <= 30) return `In ${Math.ceil(diffDays / 7)} weeks`;
+    return nextExpected;
+  }
   if (diffDays < -1) return 'E vonuar';
   if (diffDays < 0) return 'Dje';
   if (diffDays === 0) return 'Sot';
@@ -218,10 +234,13 @@ export function getNextLabel(nextExpected: string | null): string {
 // ── Insight generation ────────────────────────────────────────────────────────
 
 export function getRecurringInsights(
-  patterns: RecurringPattern[]
+  patterns: RecurringPattern[],
+  preferred: Currency = 'ALL',
+  lang = 'sq'
 ): InsightMessage[] {
   if (patterns.length === 0) return [];
 
+  const en = lang === 'en';
   const insights: InsightMessage[] = [];
 
   // 1. Monthly subscriptions summary
@@ -236,14 +255,18 @@ export function getRecurringInsights(
     }, 0);
     insights.push({
       icon: 'repeat-outline',
-      text: `${subs.length} abonime mujore aktive — ≈ ${formatCurrency(Math.round(total), 'ALL')}/muaj.`,
+      text: en
+        ? `${subs.length} active monthly subscriptions — ≈ ${formatInPreferred(Math.round(total), preferred)}/month.`
+        : `${subs.length} abonime mujore aktive — ≈ ${formatInPreferred(Math.round(total), preferred)}/muaj.`,
       type: 'info',
     });
   } else if (subs.length === 1) {
     const s = subs[0];
     insights.push({
       icon: 'repeat-outline',
-      text: `${s.name} — abonim mujor ≈ ${formatCurrency(s.avgAmount, s.currency)}.`,
+      text: en
+        ? `${s.name} — monthly subscription ≈ ${formatInPreferred(convertToALL(s.avgAmount, s.currency), preferred)}.`
+        : `${s.name} — abonim mujor ≈ ${formatInPreferred(convertToALL(s.avgAmount, s.currency), preferred)}.`,
       type: 'info',
     });
   }
@@ -256,10 +279,14 @@ export function getRecurringInsights(
       p.confidence !== 'low'
   );
   if (habit) {
-    const label = habit.frequency === 'daily' ? 'çdo ditë' : 'çdo javë';
+    const label = en
+      ? (habit.frequency === 'daily' ? 'every day' : 'every week')
+      : (habit.frequency === 'daily' ? 'çdo ditë' : 'çdo javë');
+    const timesLabel = en ? 'times' : 'herë';
+    const eachLabel = en ? 'each' : 'herë';
     insights.push({
       icon: 'time-outline',
-      text: `"${habit.name}" — ${habit.occurrences} herë, ${label}. ≈ ${formatCurrency(habit.avgAmount, habit.currency)}/herë.`,
+      text: `"${habit.name}" — ${habit.occurrences} ${timesLabel}, ${label}. ≈ ${formatInPreferred(convertToALL(habit.avgAmount, habit.currency), preferred)}/${eachLabel}.`,
       type: 'neutral',
     });
   }
@@ -270,7 +297,9 @@ export function getRecurringInsights(
     if (top) {
       insights.push({
         icon: 'calendar-outline',
-        text: `"${top.name}" del çdo muaj — ${top.occurrences} herë të regjistruara.`,
+        text: en
+          ? `"${top.name}" appears monthly — ${top.occurrences} times recorded.`
+          : `"${top.name}" del çdo muaj — ${top.occurrences} herë të regjistruara.`,
         type: 'neutral',
       });
     }

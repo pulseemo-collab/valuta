@@ -17,10 +17,10 @@ import { SyncingBanner } from '@/components/ui/SyncingBanner';
 import { CardSkeleton } from '@/components/ui/SkeletonLoader';
 import { BarChart } from '@/components/charts/BarChart';
 import { DonutChart } from '@/components/charts/DonutChart';
-import { CATEGORIES } from '@/constants/categories';
+import { CATEGORIES, getCategoryName } from '@/constants/categories';
 import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
 import {
-  formatCurrency,
+  formatInPreferred,
   getWeeklyData,
   getMonthlyData,
   getCategoryTotals,
@@ -32,6 +32,7 @@ import {
   getMonthTotal,
   type InsightMessage,
 } from '@/lib/utils';
+import { convertToALL } from '@/constants/currencies';
 import {
   detectRecurring,
   getFrequencyLabel,
@@ -47,11 +48,13 @@ import {
 import { SUBSCRIPTION_PRESETS, type SubscriptionPreset } from '@/constants/subscriptions';
 import { generateId, computeNextPaymentDate, getSubscriptionMonthlyTotal } from '@/lib/utils';
 import type { Subscription } from '@/types';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 
 type Period = 'java' | 'muaji';
 
-function insightBorderColor(type: InsightMessage['type']): string {
+function insightBorderColor(C: ColorPalette, type: InsightMessage['type']): string {
   switch (type) {
     case 'warning': return C.warning;
     case 'positive': return C.primary;
@@ -60,7 +63,7 @@ function insightBorderColor(type: InsightMessage['type']): string {
   }
 }
 
-function insightIconBg(type: InsightMessage['type']): string {
+function insightIconBg(C: ColorPalette, type: InsightMessage['type']): string {
   switch (type) {
     case 'warning': return C.warningBgSubtle;
     case 'positive': return C.primaryBgSubtle;
@@ -69,7 +72,7 @@ function insightIconBg(type: InsightMessage['type']): string {
   }
 }
 
-function insightIconColor(type: InsightMessage['type']): string {
+function insightIconColor(C: ColorPalette, type: InsightMessage['type']): string {
   switch (type) {
     case 'warning': return C.warning;
     case 'positive': return C.primary;
@@ -81,6 +84,10 @@ function insightIconColor(type: InsightMessage['type']): string {
 export default function Raporte() {
   const { state, addSubscription, removeSubscription, toggleSubscription } = useStore();
   const router = useRouter();
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
+  const subStyles = React.useMemo(() => makeSubStyles(C), [C]);
   const [period, setPeriod] = useState<Period>('java');
   const [showPresets, setShowPresets] = useState(false);
 
@@ -91,8 +98,8 @@ export default function Raporte() {
   );
 
   const chartData = period === 'java'
-    ? getWeeklyData(effectiveExpenses)
-    : getMonthlyData(effectiveExpenses);
+    ? getWeeklyData(effectiveExpenses, lang)
+    : getMonthlyData(effectiveExpenses, lang);
 
   const maxVal = Math.max(...chartData.map((d) => d.value), 1);
   const activeIdx = chartData.findIndex((d) => d.value === Math.max(...chartData.map((v) => v.value)));
@@ -114,7 +121,7 @@ export default function Raporte() {
   const weekComp = getWeekComparison(effectiveExpenses);
 
   // Insights
-  const insights = getInsights(effectiveExpenses, { monthly: state.budget.monthly });
+  const insights = getInsights(effectiveExpenses, { monthly: state.budget.monthly }, state.preferredCurrency, lang);
 
   // Recurring pattern detection
   const recurringPatterns = useMemo(
@@ -124,18 +131,18 @@ export default function Raporte() {
 
   // Budget advisory
   const budgetAdvisory = useMemo(
-    () => getBudgetAdvisory(effectiveExpenses, state.budget),
-    [effectiveExpenses, state.budget]
+    () => getBudgetAdvisory(effectiveExpenses, state.budget, state.preferredCurrency, lang),
+    [effectiveExpenses, state.budget, state.preferredCurrency, lang]
   );
   const budgetInsightMessages = useMemo(
-    () => getBudgetInsights(budgetAdvisory),
-    [budgetAdvisory]
+    () => getBudgetInsights(budgetAdvisory, state.preferredCurrency),
+    [budgetAdvisory, state.preferredCurrency]
   );
 
   // AI coach advice cards
   const adviceCards = useMemo(
-    () => generateAdviceCards(effectiveExpenses, state.budget, recurringPatterns, budgetAdvisory),
-    [effectiveExpenses, state.budget, recurringPatterns, budgetAdvisory]
+    () => generateAdviceCards(effectiveExpenses, state.budget, recurringPatterns, budgetAdvisory, lang),
+    [effectiveExpenses, state.budget, recurringPatterns, budgetAdvisory, lang]
   );
 
   // Merge budget insights into the insights list (prepend critical budget signals)
@@ -154,7 +161,7 @@ export default function Raporte() {
     return cat ? {
       value: item.total,
       color: cat.color,
-      label: cat.name,
+      label: getCategoryName(cat.id, lang),
     } : null;
   }).filter(Boolean) as Array<{ value: number; color: string; label: string }>;
 
@@ -197,11 +204,11 @@ export default function Raporte() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <View style={styles.pageTitleRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-            <Text style={styles.pageTitle}>{isBizMode ? 'Raporte Biznesi' : 'Raporte'}</Text>
+            <Text style={styles.pageTitle}>{isBizMode ? t('repBizTitle') : t('repTitle')}</Text>
             {isBizMode && (
               <View style={styles.pageBizBadge}>
                 <Ionicons name="briefcase-outline" size={11} color={C.accentLight} />
-                <Text style={styles.pageBizBadgeText}>MOD BIZNES</Text>
+                <Text style={styles.pageBizBadgeText}>{t('repBizModBadge')}</Text>
               </View>
             )}
           </View>
@@ -211,7 +218,7 @@ export default function Raporte() {
             activeOpacity={0.75}
           >
             <Ionicons name="share-outline" size={15} color={C.primary} />
-            <Text style={styles.shareBtnText}>Eksporto</Text>
+            <Text style={styles.shareBtnText}>{t('repExport')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -240,27 +247,25 @@ export default function Raporte() {
               <Ionicons name="bar-chart-outline" size={30} color={C.primary} />
             </LinearGradient>
             <Text style={styles.emptyTitle}>
-              {isBizMode ? 'Raportet e biznesit po ju presin' : 'Raportet po ju presin'}
+              {isBizMode ? t('repEmptyBizTitle') : t('repEmptyTitle2')}
             </Text>
             <Text style={styles.emptySub}>
-              {isBizMode
-                ? 'Regjistro shpenzimet e biznesit dhe do\ntë shohësh KPI, analiza dhe tendenca.'
-                : 'Regjistro shpenzimet dhe do të shohësh\ngrafikë, analiza dhe tendenca.'}
+              {isBizMode ? t('repEmptyBizSub') : t('repEmptySub2')}
             </Text>
 
             <View style={styles.emptyTeasers}>
               {(isBizMode ? [
-                { icon: 'bar-chart-outline', label: 'KPI biznesi' },
-                { icon: 'pie-chart-outline', label: 'Sipas kategorisë' },
-                { icon: 'trending-up-outline', label: 'Kosto operative' },
+                { icon: 'bar-chart-outline', label: t('repBizKpiTeaser') },
+                { icon: 'pie-chart-outline', label: t('repCatTeaser') },
+                { icon: 'trending-up-outline', label: t('repBizOpTeaser') },
               ] : [
-                { icon: 'bar-chart-outline', label: 'Grafik javor' },
-                { icon: 'pie-chart-outline', label: 'Sipas kategorisë' },
-                { icon: 'trending-up-outline', label: 'Tendenca mujore' },
-              ] as const).map((t) => (
-                <View key={t.icon} style={styles.emptyTeaser}>
-                  <Ionicons name={t.icon as any} size={20} color={C.textMuted} />
-                  <Text style={styles.emptyTeaserText}>{t.label}</Text>
+                { icon: 'bar-chart-outline', label: t('repWeeklyTeaser') },
+                { icon: 'pie-chart-outline', label: t('repCatTeaser') },
+                { icon: 'trending-up-outline', label: t('repMonthlyTeaser') },
+              ] as const).map((item) => (
+                <View key={item.icon} style={styles.emptyTeaser}>
+                  <Ionicons name={item.icon as any} size={20} color={C.textMuted} />
+                  <Text style={styles.emptyTeaserText}>{item.label}</Text>
                 </View>
               ))}
             </View>
@@ -277,7 +282,7 @@ export default function Raporte() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="add" size={16} color={C.white} />
-                <Text style={styles.emptyBtnText}>Shto shpenzimin e parë</Text>
+                <Text style={styles.emptyBtnText}>{t('repAddFirstExpense')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -289,16 +294,16 @@ export default function Raporte() {
         {/* Summary Row — this month stats */}
         <View style={styles.summaryRow}>
           <SummaryCard
-            label="Këtë muaj"
-            value={formatCurrency(Math.round(thisMonthTotal), 'ALL')}
+            label={t('repThisMonthLabel')}
+            value={formatInPreferred(Math.round(thisMonthTotal), state.preferredCurrency)}
             icon="calendar-outline"
             iconColor={C.accentLight}
             iconBg={C.accentBg}
             iconBorder={C.accentBorder}
           />
           <SummaryCard
-            label="Mesatare/ditë"
-            value={formatCurrency(Math.round(avgDailyMonth), 'ALL')}
+            label={t('repAvgPerDay')}
+            value={formatInPreferred(Math.round(avgDailyMonth), state.preferredCurrency)}
             icon="stats-chart-outline"
             iconColor={C.primaryLight}
             iconBg={C.primaryBg}
@@ -306,7 +311,7 @@ export default function Raporte() {
             highlight
           />
           <SummaryCard
-            label="Transaksione"
+            label={t('repTransactionsLabel')}
             value={String(thisMonthCount)}
             icon="receipt-outline"
             iconColor={C.warning}
@@ -326,7 +331,7 @@ export default function Raporte() {
             <View style={styles.compHeader}>
               <View style={styles.compTitleWrap}>
                 <Ionicons name="swap-horizontal-outline" size={15} color={C.accentLight} />
-                <Text style={styles.compTitle}>Ky muaj vs muaji i kaluar</Text>
+                <Text style={styles.compTitle}>{t('repMonthVsLast')}</Text>
               </View>
               {monthComp.direction !== 'same' && (
                 <View style={[
@@ -350,7 +355,7 @@ export default function Raporte() {
 
             <View style={styles.compBars}>
               <View style={styles.compBarGroup}>
-                <Text style={styles.compBarLabel}>Ky muaj</Text>
+                <Text style={styles.compBarLabel}>{t('repThisMonthBar')}</Text>
                 <View style={styles.compBarTrack}>
                   <View
                     style={[
@@ -365,11 +370,11 @@ export default function Raporte() {
                     ]}
                   />
                 </View>
-                <Text style={styles.compBarAmount}>{formatCurrency(Math.round(monthComp.thisMonth), 'ALL')}</Text>
+                <Text style={styles.compBarAmount}>{formatInPreferred(Math.round(monthComp.thisMonth), state.preferredCurrency)}</Text>
               </View>
 
               <View style={styles.compBarGroup}>
-                <Text style={styles.compBarLabel}>Muaji i kaluar</Text>
+                <Text style={styles.compBarLabel}>{t('repLastMonthBar')}</Text>
                 <View style={styles.compBarTrack}>
                   <View
                     style={[
@@ -386,7 +391,7 @@ export default function Raporte() {
                     ]}
                   />
                 </View>
-                <Text style={[styles.compBarAmount, { color: C.textSub }]}>{formatCurrency(Math.round(monthComp.lastMonth), 'ALL')}</Text>
+                <Text style={[styles.compBarAmount, { color: C.textSub }]}>{formatInPreferred(Math.round(monthComp.lastMonth), state.preferredCurrency)}</Text>
               </View>
             </View>
           </Card>
@@ -405,7 +410,7 @@ export default function Raporte() {
                 >
                   <Ionicons name="bulb-outline" size={13} color={C.warning} />
                 </LinearGradient>
-                <Text style={styles.insightTitle}>Sinjale</Text>
+                <Text style={styles.insightTitle}>{t('repSignals')}</Text>
               </View>
               <View style={styles.insightCountBadge}>
                 <Text style={styles.insightCountText}>{allInsights.length}</Text>
@@ -418,12 +423,12 @@ export default function Raporte() {
                   key={i}
                   style={[
                     styles.insightRow,
-                    { borderLeftColor: insightBorderColor(insight.type) },
+                    { borderLeftColor: insightBorderColor(C, insight.type) },
                     i < allInsights.length - 1 && styles.insightRowBorder,
                   ]}
                 >
-                  <View style={[styles.insightIconWrap, { backgroundColor: insightIconBg(insight.type) }]}>
-                    <Ionicons name={insight.icon as any} size={14} color={insightIconColor(insight.type)} />
+                  <View style={[styles.insightIconWrap, { backgroundColor: insightIconBg(C, insight.type) }]}>
+                    <Ionicons name={insight.icon as any} size={14} color={insightIconColor(C, insight.type)} />
                   </View>
                   <Text style={styles.insightText}>{insight.text}</Text>
                 </View>
@@ -445,16 +450,16 @@ export default function Raporte() {
               >
                 <Ionicons name="repeat" size={13} color={C.accentLight} />
               </LinearGradient>
-              <Text style={subStyles.title}>Abonimet</Text>
+              <Text style={subStyles.title}>{t('repSubsTitle')}</Text>
               {activeSubCount > 0 && (
                 <View style={subStyles.countBadge}>
-                  <Text style={subStyles.countText}>{activeSubCount} aktive</Text>
+                  <Text style={subStyles.countText}>{activeSubCount} {t('repSubsActive')}</Text>
                 </View>
               )}
             </View>
             {subMonthlyTotal > 0 && (
               <Text style={subStyles.monthlyTotal}>
-                {formatCurrency(Math.round(subMonthlyTotal), 'ALL')}/muaj
+                {formatInPreferred(Math.round(subMonthlyTotal), state.preferredCurrency)}{t('repSubsPerMonth')}
               </Text>
             )}
           </View>
@@ -469,16 +474,15 @@ export default function Raporte() {
                   isLast={i === state.subscriptions.length - 1}
                   onToggle={() => toggleSubscription(sub.id)}
                   onRemove={() => removeSubscription(sub.id)}
+                  preferred={state.preferredCurrency}
                 />
               ))}
             </View>
           ) : (
             <View style={subStyles.emptyState}>
               <Ionicons name="apps-outline" size={28} color={C.textFaint} />
-              <Text style={subStyles.emptyTitle}>Nuk ka abonime aktive</Text>
-              <Text style={subStyles.emptySub}>
-                Shto shërbimet që paguan çdo muaj
-              </Text>
+              <Text style={subStyles.emptyTitle}>{t('repNoSubs')}</Text>
+              <Text style={subStyles.emptySub}>{t('repNoSubsSub')}</Text>
             </View>
           )}
 
@@ -526,7 +530,7 @@ export default function Raporte() {
               color={C.accentLight}
             />
             <Text style={subStyles.addBtnText}>
-              {showPresets ? 'Mbyll listën' : 'Shto abonim'}
+              {showPresets ? t('repCloseList') : t('repAddSubBtn')}
             </Text>
           </TouchableOpacity>
         </Card>
@@ -544,10 +548,10 @@ export default function Raporte() {
                 >
                   <Ionicons name="repeat-outline" size={13} color={C.accentLight} />
                 </LinearGradient>
-                <Text style={styles.recurTitle}>Shpenzime Periodike</Text>
+                <Text style={styles.recurTitle}>{t('repRecurringTitle')}</Text>
               </View>
               <View style={styles.rankMonthBadge}>
-                <Text style={styles.rankMonthBadgeText}>{recurringPatterns.length} gjet</Text>
+                <Text style={styles.rankMonthBadgeText}>{recurringPatterns.length} {t('repRecurringFound')}</Text>
               </View>
             </View>
 
@@ -557,6 +561,7 @@ export default function Raporte() {
                   key={pattern.key}
                   pattern={pattern}
                   isLast={i === Math.min(recurringPatterns.length, 6) - 1}
+                  preferred={state.preferredCurrency}
                 />
               ))}
             </View>
@@ -567,10 +572,10 @@ export default function Raporte() {
         <Card>
           <View style={styles.chartHeader}>
             <View>
-              <Text style={styles.chartTitle}>Shpenzimet</Text>
+              <Text style={styles.chartTitle}>{t('repSpending')}</Text>
               {maxVal > 0 && (
                 <Text style={styles.chartSubtitle}>
-                  Më i lartë: {formatCurrency(maxVal, 'ALL')}
+                  {lang === 'en' ? 'Peak:' : 'Më i lartë:'} {formatInPreferred(maxVal, state.preferredCurrency)}
                 </Text>
               )}
             </View>
@@ -591,7 +596,7 @@ export default function Raporte() {
                     />
                   )}
                   <Text style={[styles.periodText, period === p && styles.periodTextActive]}>
-                    {p === 'java' ? 'Javore' : 'Mujore'}
+                    {p === 'java' ? t('repWeeklyToggle') : t('repMonthlyToggle')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -613,11 +618,11 @@ export default function Raporte() {
               <Text style={styles.chartLegendText}>
                 {period === 'java' && weekComp.lastWeek > 0
                   ? weekComp.direction === 'up'
-                    ? `Kjo javë +${weekComp.pctChange.toFixed(0)}% krahasuar me javën e kaluar`
+                    ? `${t('dashThisWeek')} +${weekComp.pctChange.toFixed(0)}% ${lang === 'en' ? 'vs last week' : 'krahasuar me javën e kaluar'}`
                     : weekComp.direction === 'down'
-                    ? `Kjo javë −${Math.abs(weekComp.pctChange).toFixed(0)}% krahasuar me javën e kaluar`
-                    : 'Shpenzime të ngjashme me javën e kaluar'
-                  : 'Shpenzime mujore — 6 muajt e fundit'}
+                    ? `${t('dashThisWeek')} −${Math.abs(weekComp.pctChange).toFixed(0)}% ${lang === 'en' ? 'vs last week' : 'krahasuar me javën e kaluar'}`
+                    : t('repWeekSimilar')
+                  : t('repMonthlyLast6')}
               </Text>
             </View>
           )}
@@ -627,14 +632,14 @@ export default function Raporte() {
         {donutData.length > 0 && (
           <Card>
             <Text style={[styles.chartTitle, { marginBottom: 18 }]}>
-              {isBizMode ? 'Shpenzime biznesi sipas Kategorisë' : 'Shpenzime sipas Kategorisë'}
+              {isBizMode ? t('repBizCatTitle') : t('repCatTitle')}
             </Text>
             <DonutChart
               data={donutData}
               size={164}
               thickness={24}
-              centerValue={formatCurrency(Math.round(totalAllTime), 'ALL')}
-              centerLabel="Totali"
+              centerValue={formatInPreferred(Math.round(totalAllTime), state.preferredCurrency)}
+              centerLabel={t('repCenterTotal')}
             />
           </Card>
         )}
@@ -644,7 +649,7 @@ export default function Raporte() {
           <Card>
             <View style={styles.rankHeaderRow}>
               <Text style={styles.chartTitle}>
-                {isBizMode ? 'Kategoritë e biznesit këtë muaj' : 'Kategoritë këtë muaj'}
+                {isBizMode ? t('repBizCatMonthTitle') : t('repCatMonthTitle')}
               </Text>
               <View style={styles.rankMonthBadge}>
                 <Text style={styles.rankMonthBadgeText}>{thisMonthCount} tx</Text>
@@ -669,7 +674,7 @@ export default function Raporte() {
                       </View>
                       <View style={{ flex: 1, gap: 4 }}>
                         <View style={styles.rankLabelRow}>
-                          <Text style={styles.rankLabel}>{cat.name}</Text>
+                          <Text style={styles.rankLabel}>{getCategoryName(cat.id, lang)}</Text>
                           <Text style={styles.rankTxCount}>{txCount} tx</Text>
                         </View>
                         <View style={styles.rankBar}>
@@ -683,7 +688,7 @@ export default function Raporte() {
                       </View>
                     </View>
                     <View style={styles.rankRight}>
-                      <Text style={styles.rankAmount}>{formatCurrency(Math.round(item.total), 'ALL')}</Text>
+                      <Text style={styles.rankAmount}>{formatInPreferred(Math.round(item.total), state.preferredCurrency)}</Text>
                       <Text style={[styles.rankPct, { color: cat.color }]}>{item.percent.toFixed(1)}%</Text>
                     </View>
                   </View>
@@ -703,38 +708,24 @@ export default function Raporte() {
 
 // ── Këshilla Smart ────────────────────────────────────────────────────────────
 
-const ADVICE_META: Record<
+function getAdviceMeta(t: (k: import('@/lib/i18n').TKey) => string): Record<
   AdviceType,
   { label: string; color: string; bgColor: string }
-> = {
-  saving_tip: {
-    label: 'Kursim',
-    color: C.primary,
-    bgColor: C.primaryBgSubtle,
-  },
-  warning: {
-    label: 'Kujdes',
-    color: C.warning,
-    bgColor: C.warningBgSubtle,
-  },
-  trend: {
-    label: 'Tendencë',
-    color: C.accentLight,
-    bgColor: C.accentBgSubtle,
-  },
-  recurring_payment: {
-    label: 'Periodike',
-    color: C.accent,
-    bgColor: C.accentBgSubtle,
-  },
-  budget_suggestion: {
-    label: 'Buxhet',
-    color: '#A78BFA',
-    bgColor: 'rgba(167,139,250,0.08)',
-  },
-};
+> {
+  return {
+    saving_tip: { label: t('repAdviceType_saving'), color: '#10B981', bgColor: 'rgba(16,185,129,0.07)' },
+    warning: { label: t('repAdviceType_warning'), color: '#D97706', bgColor: 'rgba(217,119,6,0.07)' },
+    trend: { label: t('repAdviceType_trend'), color: '#2563EB', bgColor: 'rgba(59,130,246,0.07)' },
+    recurring_payment: { label: t('repAdviceType_recurring'), color: '#3B82F6', bgColor: 'rgba(59,130,246,0.07)' },
+    budget_suggestion: { label: t('repAdviceType_budget'), color: '#A78BFA', bgColor: 'rgba(167,139,250,0.08)' },
+  };
+}
 
 function KeshillaSmartSection({ cards }: { cards: AdviceCard[] }) {
+  const C = useThemeColors();
+  const { t } = useTranslation();
+  const ADVICE_META = getAdviceMeta(t);
+  const coachStyles = React.useMemo(() => makeCoachStyles(C), [C]);
   return (
     <Card>
       {/* Header */}
@@ -748,7 +739,7 @@ function KeshillaSmartSection({ cards }: { cards: AdviceCard[] }) {
           >
             <Ionicons name="sparkles-outline" size={13} color="#A78BFA" />
           </LinearGradient>
-          <Text style={coachStyles.title}>Këshilla Smart</Text>
+          <Text style={coachStyles.title}>{t('repSmartAdvice')}</Text>
           <View style={coachStyles.aiBadge}>
             <Text style={coachStyles.aiBadgeText}>AI</Text>
           </View>
@@ -793,14 +784,15 @@ function KeshillaSmartSection({ cards }: { cards: AdviceCard[] }) {
         activeOpacity={0.72}
         onPress={() => {}}
       >
-        <Text style={coachStyles.ctaText}>Shiko analizën e plotë</Text>
+        <Text style={coachStyles.ctaText}>{t('repSeeFullAnalysis')}</Text>
         <Ionicons name="arrow-forward" size={13} color="#A78BFA" />
       </TouchableOpacity>
     </Card>
   );
 }
 
-const coachStyles = StyleSheet.create({
+function makeCoachStyles(C: ColorPalette) {
+  return StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -881,7 +873,8 @@ const coachStyles = StyleSheet.create({
     borderTopColor: C.border,
   },
   ctaText: { fontSize: 13, fontWeight: '700', color: '#A78BFA' },
-});
+  });
+}
 
 // ── SubscriptionRow ───────────────────────────────────────────────────────────
 
@@ -890,15 +883,20 @@ function SubscriptionRow({
   isLast,
   onToggle,
   onRemove,
+  preferred,
 }: {
   sub: Subscription;
   isLast: boolean;
   onToggle: () => void;
   onRemove: () => void;
+  preferred: import('@/types').Currency;
 }) {
-  const nextLabel = getNextLabel(sub.nextPaymentDate);
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const subStyles = React.useMemo(() => makeSubStyles(C), [C]);
+  const nextLabel = getNextLabel(sub.nextPaymentDate, lang);
   const freqLabel =
-    sub.frequency === 'weekly' ? 'Javore' : sub.frequency === 'monthly' ? 'Mujore' : 'Vjetore';
+    sub.frequency === 'weekly' ? t('repFreqWeekly') : sub.frequency === 'monthly' ? t('repFreqMonthly') : t('repFreqYearly');
 
   return (
     <View style={[subStyles.row, !isLast && subStyles.rowDivider]}>
@@ -918,14 +916,14 @@ function SubscriptionRow({
           )}
           {!sub.isActive && (
             <View style={subStyles.inactivePill}>
-              <Text style={subStyles.inactivePillText}>Joaktiv</Text>
+              <Text style={subStyles.inactivePillText}>{t('repSubInactive')}</Text>
             </View>
           )}
         </View>
       </View>
       <View style={subStyles.rowRight}>
         <Text style={[subStyles.rowAmt, !sub.isActive && { color: C.textFaint }]}>
-          {formatCurrency(sub.amount, sub.currency)}
+          {formatInPreferred(convertToALL(sub.amount, sub.currency), preferred)}
         </Text>
         <Switch
           value={sub.isActive}
@@ -939,7 +937,8 @@ function SubscriptionRow({
   );
 }
 
-const subStyles = StyleSheet.create({
+function makeSubStyles(C: ColorPalette) {
+  return StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1059,19 +1058,25 @@ const subStyles = StyleSheet.create({
     position: 'relative',
   },
   addBtnText: { fontSize: 13, fontWeight: '700', color: C.accentLight },
-});
+  });
+}
 
 // ── RecurringPatternRow ───────────────────────────────────────────────────────
 
 function RecurringPatternRow({
   pattern,
   isLast,
+  preferred,
 }: {
   pattern: RecurringPattern;
   isLast: boolean;
+  preferred: import('@/types').Currency;
 }) {
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const recurStyles = React.useMemo(() => makeRecurStyles(C), [C]);
   const cat = [...CATEGORIES, ...BUSINESS_CATEGORIES].find((c) => c.id === pattern.category);
-  const nextLabel = getNextLabel(pattern.nextExpected);
+  const nextLabel = getNextLabel(pattern.nextExpected, lang);
   const confColor =
     pattern.confidence === 'high'
       ? C.primary
@@ -1097,13 +1102,13 @@ function RecurringPatternRow({
           <Text style={recurStyles.name} numberOfLines={1}>{pattern.name}</Text>
           {pattern.isSubscription && (
             <View style={recurStyles.subBadge}>
-              <Text style={recurStyles.subBadgeText}>ABONIM</Text>
+              <Text style={recurStyles.subBadgeText}>{t('repSubBadge')}</Text>
             </View>
           )}
         </View>
         <View style={recurStyles.metaRow}>
           <View style={recurStyles.freqBadge}>
-            <Text style={recurStyles.freqText}>{getFrequencyLabel(pattern.frequency)}</Text>
+            <Text style={recurStyles.freqText}>{getFrequencyLabel(pattern.frequency, lang)}</Text>
           </View>
           <Text style={recurStyles.occText}>{pattern.occurrences}×</Text>
           {nextLabel !== '' && (
@@ -1117,15 +1122,16 @@ function RecurringPatternRow({
       {/* Right: amount */}
       <View style={recurStyles.right}>
         <Text style={recurStyles.amount}>
-          ≈ {formatCurrency(pattern.avgAmount, pattern.currency)}
+          ≈ {formatInPreferred(convertToALL(pattern.avgAmount, pattern.currency), preferred)}
         </Text>
-        <Text style={recurStyles.amountLabel}>/ {pattern.frequency === 'daily' ? 'ditë' : pattern.frequency === 'weekly' ? 'javë' : 'muaj'}</Text>
+        <Text style={recurStyles.amountLabel}>/ {pattern.frequency === 'daily' ? t('repPerDay') : pattern.frequency === 'weekly' ? t('repPerWeek') : t('repPerMonth')}</Text>
       </View>
     </View>
   );
 }
 
-const recurStyles = StyleSheet.create({
+function makeRecurStyles(C: ColorPalette) {
+  return StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1174,7 +1180,8 @@ const recurStyles = StyleSheet.create({
   right: { alignItems: 'flex-end', gap: 2, flexShrink: 0 },
   amount: { fontSize: 12, fontWeight: '800', color: C.text, letterSpacing: -0.2 },
   amountLabel: { fontSize: 10, color: C.textMuted, fontWeight: '500' },
-});
+  });
+}
 
 function SummaryCard({
   label,
@@ -1193,6 +1200,8 @@ function SummaryCard({
   iconBorder: string;
   highlight?: boolean;
 }) {
+  const C = useThemeColors();
+  const summaryStyles = React.useMemo(() => makeSummaryStyles(C), [C]);
   return (
     <View style={[summaryStyles.card, highlight && summaryStyles.highlight]}>
       <View style={summaryStyles.topEdge} />
@@ -1213,7 +1222,8 @@ function SummaryCard({
   );
 }
 
-const summaryStyles = StyleSheet.create({
+function makeSummaryStyles(C: ColorPalette) {
+  return StyleSheet.create({
   card: {
     flex: 1,
     backgroundColor: C.card,
@@ -1252,9 +1262,11 @@ const summaryStyles = StyleSheet.create({
   },
   value: { fontSize: 13, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
   label: { fontSize: 10, color: C.textMuted, fontWeight: '500', lineHeight: 14 },
-});
+  });
+}
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
   pageTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1537,4 +1549,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
   },
   emptyBtnText: { fontSize: 14, fontWeight: '700', color: C.white },
-});
+  });
+}

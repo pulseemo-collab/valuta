@@ -62,3 +62,27 @@ export const CATEGORIES: Category[] = [
 
 export const getCategoryById = (id: CategoryId): Category =>
   [...CATEGORIES, ...BUSINESS_CATEGORIES].find((c) => c.id === id) ?? CATEGORIES[7];
+
+const CATEGORY_NAMES_EN: Record<string, string> = {
+  ushqim: 'Food',
+  transport: 'Transport',
+  faturat: 'Bills',
+  shopping: 'Shopping',
+  shendet: 'Health',
+  argetime: 'Entertainment',
+  biznes: 'Business',
+  tjera: 'Other',
+  furnitor: 'Suppliers',
+  inventar: 'Inventory',
+  marketing_biz: 'Marketing',
+  zyre: 'Office',
+  transport_biz: 'Transport',
+  punonjes: 'Employees',
+  taksa: 'Taxes',
+  sherbime: 'Services',
+};
+
+export function getCategoryName(id: string, lang: string): string {
+  if (lang === 'en') return CATEGORY_NAMES_EN[id] ?? getCategoryById(id as CategoryId).name;
+  return getCategoryById(id as CategoryId).name;
+}

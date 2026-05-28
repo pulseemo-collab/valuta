@@ -15,20 +15,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '@/lib/store';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { GOAL_PRESETS, type GoalPreset } from '@/constants/goals';
+import { GOAL_PRESETS, getGoalPresetTitle, type GoalPreset } from '@/constants/goals';
 import {
-  formatCurrency,
+  formatInPreferred,
   generateId,
   computeGoalProgress,
   estimateGoalMonths,
   getMonthlyData,
 } from '@/lib/utils';
-import { C, GRADIENTS } from '@/constants/colors';
+import { convertToALL } from '@/constants/currencies';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 import type { FinancialGoal, Currency } from '@/types';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function monthsLabel(n: number): string {
+function monthsLabel(n: number, lang: string): string {
+  if (lang === 'en') {
+    if (n === 1) return '~1 month';
+    if (n < 12) return `~${n} months`;
+    const yrs = Math.floor(n / 12);
+    const mo = n % 12;
+    return mo > 0 ? `~${yrs} yr ${mo} mo` : `~${yrs} yr`;
+  }
   if (n === 1) return '~1 muaj';
   if (n < 12) return `~${n} muaj`;
   const yrs = Math.floor(n / 12);
@@ -55,12 +65,17 @@ function GoalCard({
   monthlySavings,
   onAddSavings,
   onDelete,
+  preferred,
 }: {
   goal: FinancialGoal;
   monthlySavings: number;
   onAddSavings: (goal: FinancialGoal) => void;
   onDelete: (id: string) => void;
+  preferred: Currency;
 }) {
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
   const { pct, remainingALL, isComplete } = computeGoalProgress(goal);
   const monthsToGo = estimateGoalMonths(goal, monthlySavings);
   const hasDeadline = !!goal.deadline;
@@ -74,11 +89,11 @@ function GoalCard({
 
   const handleDelete = () => {
     Alert.alert(
-      'Fshi qëllimin',
-      `A je i sigurt që dëshiron të fshish "${goal.title}"?`,
+      t('goalsDeleteConfirmTitle'),
+      lang === 'en' ? `Are you sure you want to delete "${goal.title}"?` : `A je i sigurt që dëshiron të fshish "${goal.title}"?`,
       [
-        { text: 'Anulo', style: 'cancel' },
-        { text: 'Fshi', style: 'destructive', onPress: () => onDelete(goal.id) },
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('delete'), style: 'destructive', onPress: () => onDelete(goal.id) },
       ]
     );
   };
@@ -112,7 +127,7 @@ function GoalCard({
             {isComplete && (
               <View style={styles.completeBadge}>
                 <Ionicons name="checkmark-circle" size={11} color={C.primary} />
-                <Text style={styles.completeBadgeText}>Arritur!</Text>
+                <Text style={styles.completeBadgeText}>{t('goalsAchievedBadge')}</Text>
               </View>
             )}
           </View>
@@ -123,7 +138,7 @@ function GoalCard({
               activeOpacity={0.75}
             >
               <Ionicons name="add" size={14} color={goal.color} />
-              <Text style={[styles.goalActionText, { color: goal.color }]}>Shto</Text>
+              <Text style={[styles.goalActionText, { color: goal.color }]}>{t('add')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.goalDeleteBtn}
@@ -156,24 +171,24 @@ function GoalCard({
         {/* Amounts */}
         <View style={styles.amountsRow}>
           <View style={styles.amountBlock}>
-            <Text style={styles.amountLabel}>Kursyer</Text>
+            <Text style={styles.amountLabel}>{t('goalsSaved')}</Text>
             <Text style={[styles.amountValue, { color: goal.color }]}>
-              {formatCurrency(goal.savedAmount, goal.currency)}
+              {formatInPreferred(convertToALL(goal.savedAmount, goal.currency), preferred)}
             </Text>
           </View>
           <View style={styles.amountDivider} />
           <View style={styles.amountBlock}>
-            <Text style={styles.amountLabel}>Objektivi</Text>
+            <Text style={styles.amountLabel}>{t('goalsObjective')}</Text>
             <Text style={styles.amountValue}>
-              {formatCurrency(goal.targetAmount, goal.currency)}
+              {formatInPreferred(convertToALL(goal.targetAmount, goal.currency), preferred)}
             </Text>
           </View>
           {!isComplete && (
             <>
               <View style={styles.amountDivider} />
               <View style={styles.amountBlock}>
-                <Text style={styles.amountLabel}>Mbetet</Text>
-                <Text style={styles.amountValue}>{formatCurrency(Math.round(remainingALL), 'ALL')}</Text>
+                <Text style={styles.amountLabel}>{t('goalsRemaining2')}</Text>
+                <Text style={styles.amountValue}>{formatInPreferred(Math.round(remainingALL), preferred)}</Text>
               </View>
             </>
           )}
@@ -184,13 +199,13 @@ function GoalCard({
           {!isComplete && monthsToGo !== null && monthsToGo > 0 && (
             <View style={styles.goalChip}>
               <Ionicons name="time-outline" size={11} color={C.textMuted} />
-              <Text style={styles.goalChipText}>{monthsLabel(monthsToGo)}</Text>
+              <Text style={styles.goalChipText}>{monthsLabel(monthsToGo, lang)}</Text>
             </View>
           )}
           {!isComplete && monthsToGo === null && monthlySavings <= 0 && (
             <View style={styles.goalChip}>
               <Ionicons name="time-outline" size={11} color={C.textMuted} />
-              <Text style={styles.goalChipText}>Vendos buxhet për vlerësim</Text>
+              <Text style={styles.goalChipText}>{t('goalsSetBudgetForEst')}</Text>
             </View>
           )}
           {hasDeadline && (
@@ -210,9 +225,9 @@ function GoalCard({
                 deadlineUrgent && !deadlineOverdue && { color: C.warning },
               ]}>
                 {deadlineOverdue
-                  ? `Afati kaloi ${Math.abs(deadlineDays!)} ditë më parë`
+                  ? (lang === 'en' ? `Deadline passed ${Math.abs(deadlineDays!)} days ago` : `Afati kaloi ${Math.abs(deadlineDays!)} ditë më parë`)
                   : deadlineUrgent
-                  ? `${deadlineDays} ditë deri në afat`
+                  ? (lang === 'en' ? `${deadlineDays} days until deadline` : `${deadlineDays} ditë deri në afat`)
                   : deadlineLabel(goal.deadline!)}
               </Text>
             </View>
@@ -229,6 +244,9 @@ type ModalStep = 'presets' | 'form';
 
 export default function Qellimet() {
   const { state, addGoal, updateGoal, removeGoal } = useStore();
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const styles = useMemo(() => makeStyles(C), [C]);
 
   // Estimate monthly savings from last 3 months
   const monthlySavings = useMemo(() => {
@@ -309,18 +327,18 @@ export default function Qellimet() {
     const target = parseFloat(formTarget.replace(',', '.'));
     const saved = parseFloat(formSaved.replace(',', '.') || '0');
     if (!formTitle.trim()) {
-      Alert.alert('Gabim', 'Vendos titullin e qëllimit.');
+      Alert.alert(t('goalsErrorTitle'), t('goalsErrorNoTitle'));
       return;
     }
     if (isNaN(target) || target <= 0) {
-      Alert.alert('Gabim', 'Vendos një shumë objektivi të vlefshme.');
+      Alert.alert(t('goalsErrorTitle'), t('goalsErrorInvalidAmount'));
       return;
     }
     const deadlineValid =
       !formDeadline ||
       (/^\d{4}-\d{2}-\d{2}$/.test(formDeadline) && !isNaN(new Date(formDeadline).getTime()));
     if (!deadlineValid) {
-      Alert.alert('Gabim', 'Formati i afatit duhet të jetë VVVV-MM-DD.');
+      Alert.alert(t('goalsErrorTitle'), t('goalsErrorInvalidDate'));
       return;
     }
 
@@ -352,7 +370,7 @@ export default function Qellimet() {
     if (!savingsModalGoal) return;
     const amount = parseFloat(savingsAmount.replace(',', '.'));
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Gabim', 'Vendos një shumë të vlefshme.');
+      Alert.alert(t('goalsErrorTitle'), t('goalsErrorInvalidSavings'));
       return;
     }
     const newSaved = savingsModalGoal.savedAmount + amount;
@@ -376,10 +394,10 @@ export default function Qellimet() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.headerRow}>
-          <Text style={styles.pageTitle}>Qëllimet</Text>
+          <Text style={styles.pageTitle}>{t('goalsTitle')}</Text>
           {totalGoalsCount > 0 && (
             <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>{activeGoalsCount} aktive</Text>
+              <Text style={styles.headerBadgeText}>{activeGoalsCount} {t('goalsActive')}</Text>
             </View>
           )}
         </View>
@@ -389,28 +407,28 @@ export default function Qellimet() {
           <View style={styles.summaryStrip}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{totalGoalsCount}</Text>
-              <Text style={styles.summaryLabel}>Gjithsej</Text>
+              <Text style={styles.summaryLabel}>{t('goalsTotal')}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryValue, { color: C.primary }]}>{activeGoalsCount}</Text>
-              <Text style={styles.summaryLabel}>Në progres</Text>
+              <Text style={styles.summaryLabel}>{t('goalsInProgress')}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>
                 {state.goals.filter((g) => !!g.completedAt).length}
               </Text>
-              <Text style={styles.summaryLabel}>Arritura</Text>
+              <Text style={styles.summaryLabel}>{t('goalsCompleted')}</Text>
             </View>
             {monthlySavings > 0 && (
               <>
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryValue} numberOfLines={1}>
-                    {formatCurrency(Math.round(monthlySavings), 'ALL')}
+                    {formatInPreferred(Math.round(monthlySavings), state.preferredCurrency)}
                   </Text>
-                  <Text style={styles.summaryLabel}>Kursim/muaj</Text>
+                  <Text style={styles.summaryLabel}>{t('goalsSavingsPerMonth')}</Text>
                 </View>
               </>
             )}
@@ -434,11 +452,8 @@ export default function Qellimet() {
             >
               <Ionicons name="trophy-outline" size={30} color={C.white} />
             </LinearGradient>
-            <Text style={styles.emptyTitle}>Nis të kursesh për qëllimet e tua</Text>
-            <Text style={styles.emptySub}>
-              Cakto objektiva financiare dhe gjurmo progresin drejt tyre.
-              Nga telefoni i ri deri te fondi i emergjencës.
-            </Text>
+            <Text style={styles.emptyTitle}>{t('goalsEmptyTitle2')}</Text>
+            <Text style={styles.emptySub}>{t('goalsEmptySub2')}</Text>
             <TouchableOpacity
               style={styles.emptyBtn}
               onPress={() => openAddModal()}
@@ -451,7 +466,7 @@ export default function Qellimet() {
                 end={{ x: 1, y: 0 }}
               >
                 <Ionicons name="add" size={16} color={C.white} />
-                <Text style={styles.emptyBtnText}>Shto qëllimin e parë</Text>
+                <Text style={styles.emptyBtnText}>{t('goalsAddFirstBtn')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -463,7 +478,7 @@ export default function Qellimet() {
             {showBothSections && (
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionAccent} />
-                <Text style={styles.sectionTitle}>Personale</Text>
+                <Text style={styles.sectionTitle}>{t('goalsPersonal')}</Text>
               </View>
             )}
             {personalGoals.map((goal) => (
@@ -473,6 +488,7 @@ export default function Qellimet() {
                 monthlySavings={monthlySavings}
                 onAddSavings={openSavingsModal}
                 onDelete={removeGoal}
+                preferred={state.preferredCurrency}
               />
             ))}
           </>
@@ -484,7 +500,7 @@ export default function Qellimet() {
             {showBothSections && (
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionAccent, { backgroundColor: C.accentLight }]} />
-                <Text style={styles.sectionTitle}>Biznesi</Text>
+                <Text style={styles.sectionTitle}>{t('goalsBusiness')}</Text>
                 <View style={styles.bizTag}>
                   <Ionicons name="briefcase-outline" size={10} color={C.accentLight} />
                   <Text style={styles.bizTagText}>BIZ</Text>
@@ -498,6 +514,7 @@ export default function Qellimet() {
                 monthlySavings={monthlySavings}
                 onAddSavings={openSavingsModal}
                 onDelete={removeGoal}
+                preferred={state.preferredCurrency}
               />
             ))}
           </>
@@ -517,7 +534,7 @@ export default function Qellimet() {
               end={{ x: 1, y: 0 }}
             >
               <Ionicons name="add" size={16} color={C.white} />
-              <Text style={styles.addBtnText}>Shto qëllim të ri</Text>
+              <Text style={styles.addBtnText}>{t('goalsAddNew')}</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
@@ -526,9 +543,7 @@ export default function Qellimet() {
         {monthlySavings <= 0 && totalGoalsCount > 0 && (
           <View style={styles.tipCard}>
             <Ionicons name="bulb-outline" size={14} color={C.accentLight} />
-            <Text style={styles.tipText}>
-              Vendos buxhetin mujor në skedën "Buxheti" për të parë kur do t'i arrish qëllimet.
-            </Text>
+            <Text style={styles.tipText}>{t('goalsTipText')}</Text>
           </View>
         )}
 
@@ -552,7 +567,7 @@ export default function Qellimet() {
                 </TouchableOpacity>
               )}
               <Text style={styles.modalTitle}>
-                {modalStep === 'presets' ? 'Zgjidh qëllimin' : 'Detajet'}
+                {modalStep === 'presets' ? t('goalsModalSelectTitle') : t('goalsModalFormTitle')}
               </Text>
               <TouchableOpacity
                 onPress={() => setModalVisible(false)}
@@ -586,9 +601,9 @@ export default function Qellimet() {
                       <View style={[styles.presetIcon, { backgroundColor: preset.bgColor }]}>
                         <Ionicons name={preset.icon as any} size={20} color={preset.color} />
                       </View>
-                      <Text style={styles.presetTitle}>{preset.title}</Text>
+                      <Text style={styles.presetTitle}>{getGoalPresetTitle(preset.title, lang)}</Text>
                       <Text style={styles.presetAmount}>
-                        {formatCurrency(preset.suggestedAmount, preset.currency)}
+                        {formatInPreferred(convertToALL(preset.suggestedAmount, preset.currency), state.preferredCurrency)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -605,8 +620,8 @@ export default function Qellimet() {
                     <View style={[styles.presetIcon, { backgroundColor: C.elevated }]}>
                       <Ionicons name="create-outline" size={20} color={C.textMuted} />
                     </View>
-                    <Text style={styles.presetTitle}>Personalizuar</Text>
-                    <Text style={styles.presetAmount}>Krijoni tuajin</Text>
+                    <Text style={styles.presetTitle}>{t('goalsCustom')}</Text>
+                    <Text style={styles.presetAmount}>{t('goalsCustomSubtitle')}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -623,12 +638,12 @@ export default function Qellimet() {
 
                   {!selectedPreset && (
                     <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Titulli</Text>
+                      <Text style={styles.formLabel}>{t('goalsFormTitleLabel')}</Text>
                       <TextInput
                         style={styles.formInput}
                         value={formTitle}
                         onChangeText={setFormTitle}
-                        placeholder="p.sh. Pushime verore"
+                        placeholder={t('goalsPlaceholderTitle')}
                         placeholderTextColor={C.textMuted}
                       />
                     </View>
@@ -636,7 +651,7 @@ export default function Qellimet() {
 
                   {selectedPreset && (
                     <View style={styles.formField}>
-                      <Text style={styles.formLabel}>Titulli (opsional — ndrysho)</Text>
+                      <Text style={styles.formLabel}>{t('goalsFormTitleOptional')}</Text>
                       <TextInput
                         style={styles.formInput}
                         value={formTitle}
@@ -648,14 +663,14 @@ export default function Qellimet() {
                   )}
 
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Objektivi (Lek)</Text>
+                    <Text style={styles.formLabel}>{t('goalsFormTarget')}</Text>
                     <View style={styles.formInputRow}>
                       <TextInput
                         style={[styles.formInput, { flex: 1 }]}
                         value={formTarget}
                         onChangeText={setFormTarget}
                         keyboardType="numeric"
-                        placeholder="p.sh. 200000"
+                        placeholder={t('goalsPlaceholderTarget')}
                         placeholderTextColor={C.textMuted}
                       />
                       <Text style={styles.formCurrencyTag}>L</Text>
@@ -663,7 +678,7 @@ export default function Qellimet() {
                   </View>
 
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Kursyer deri tani (Lek)</Text>
+                    <Text style={styles.formLabel}>{t('goalsFormSaved')}</Text>
                     <View style={styles.formInputRow}>
                       <TextInput
                         style={[styles.formInput, { flex: 1 }]}
@@ -678,19 +693,19 @@ export default function Qellimet() {
                   </View>
 
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Afati (opsional)</Text>
+                    <Text style={styles.formLabel}>{t('goalsFormDeadline')}</Text>
                     <TextInput
                       style={styles.formInput}
                       value={formDeadline}
                       onChangeText={setFormDeadline}
-                      placeholder="VVVV-MM-DD (p.sh. 2025-12-31)"
+                      placeholder={t('goalsPlaceholderDeadline')}
                       placeholderTextColor={C.textMuted}
                     />
                   </View>
 
                   {/* Mode selector */}
                   <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Lloji</Text>
+                    <Text style={styles.formLabel}>{t('goalsFormType')}</Text>
                     <View style={styles.modeRow}>
                       <TouchableOpacity
                         style={[styles.modeChip, formMode === 'personal' && styles.modeChipActive]}
@@ -699,7 +714,7 @@ export default function Qellimet() {
                       >
                         <Ionicons name="person-outline" size={13} color={formMode === 'personal' ? C.primary : C.textMuted} />
                         <Text style={[styles.modeChipText, formMode === 'personal' && styles.modeChipTextActive]}>
-                          Personal
+                          {t('goalsPersonalLabel')}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -709,7 +724,7 @@ export default function Qellimet() {
                       >
                         <Ionicons name="briefcase-outline" size={13} color={formMode === 'business' ? C.accentLight : C.textMuted} />
                         <Text style={[styles.modeChipText, formMode === 'business' && styles.modeChipTextBizActive]}>
-                          Biznes
+                          {t('goalsBizLabel')}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -717,10 +732,10 @@ export default function Qellimet() {
 
                   <View style={styles.formActions}>
                     <Button variant="secondary" onPress={() => setModalVisible(false)} style={{ flex: 1 }}>
-                      Anulo
+                      {t('cancel')}
                     </Button>
                     <Button onPress={handleSubmitGoal} style={{ flex: 1 }}>
-                      Shto
+                      {t('add')}
                     </Button>
                   </View>
                 </View>
@@ -744,9 +759,9 @@ export default function Qellimet() {
                 <View style={[styles.savingsIconWrap, { backgroundColor: savingsModalGoal.bgColor }]}>
                   <Ionicons name={savingsModalGoal.icon as any} size={22} color={savingsModalGoal.color} />
                 </View>
-                <Text style={styles.savingsTitle}>Shto kursim</Text>
+                <Text style={styles.savingsTitle}>{t('goalsAddSavingsTitle')}</Text>
                 <Text style={styles.savingsSub}>
-                  {savingsModalGoal.title} · {formatCurrency(savingsModalGoal.savedAmount, savingsModalGoal.currency)} kursyer
+                  {savingsModalGoal.title} · {formatInPreferred(convertToALL(savingsModalGoal.savedAmount, savingsModalGoal.currency), state.preferredCurrency)} {t('goalsSaved').toLowerCase()}
                 </Text>
 
                 {/* Preview progress */}
@@ -777,7 +792,7 @@ export default function Qellimet() {
                     value={savingsAmount}
                     onChangeText={setSavingsAmount}
                     keyboardType="numeric"
-                    placeholder="Shuma e re"
+                    placeholder={t('goalsNewAmountPlaceholder')}
                     placeholderTextColor={C.textMuted}
                     autoFocus
                   />
@@ -788,10 +803,10 @@ export default function Qellimet() {
 
                 <View style={styles.savingsActions}>
                   <Button variant="secondary" onPress={() => setSavingsModalGoal(null)} style={{ flex: 1 }}>
-                    Anulo
+                    {t('cancel')}
                   </Button>
                   <Button onPress={handleAddSavings} style={{ flex: 1 }}>
-                    Ruaj
+                    {t('save')}
                   </Button>
                 </View>
               </>
@@ -803,7 +818,8 @@ export default function Qellimet() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, paddingTop: 12, gap: 14 },
 
@@ -1281,4 +1297,5 @@ const styles = StyleSheet.create({
   },
   savingsCurrencyTag: { fontSize: 16, fontWeight: '800', color: C.primary },
   savingsActions: { flexDirection: 'row', gap: 12 },
-});
+  });
+}

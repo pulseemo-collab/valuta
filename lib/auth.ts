@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseConfigMissing } from '@/lib/supabase';
 
 export async function signIn(email: string, password: string) {
   if (__DEV__) console.log('[Auth] signIn attempt:', email);
@@ -72,7 +72,14 @@ export function toAlbanianError(message: string, code?: string): string {
   if (message.includes('Unable to validate email') || message.includes('invalid email')) return 'Formati i emailit është i pavlefshëm.';
   if (message.includes('Signups not allowed')) return 'Regjistrimi është çaktivizuar momentalisht.';
   if (message.includes('rate limit') || message.includes('too many')) return 'Shumë tentativa. Provo përsëri pas pak minutash.';
-  if (message.includes('network') || message.includes('fetch') || message.includes('Failed to fetch')) return 'Nuk ka lidhje interneti. Provo përsëri.';
+  // Case-insensitive check — React Native throws "Network request failed" (capital N)
+  const lower = message.toLowerCase();
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('failed to fetch')) {
+    if (supabaseConfigMissing) {
+      return 'Konfigurimi i Supabase mungon në build-in Android. Kontakto administratorin.';
+    }
+    return 'Nuk ka lidhje interneti. Provo përsëri.';
+  }
   if (
     message.includes('Invalid JWT') ||
     message.includes('invalid_jwt') ||

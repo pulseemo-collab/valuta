@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, View, ViewStyle } from 'react-native';
-import { C } from '@/constants/colors';
+import { useThemeColors } from '@/lib/ThemeContext';
 
 export function SkeletonBox({
   width = '100%',
@@ -13,6 +13,7 @@ export function SkeletonBox({
   borderRadius?: number;
   style?: ViewStyle;
 }) {
+  const C = useThemeColors();
   const anim = useRef(new Animated.Value(0.35)).current;
 
   useEffect(() => {

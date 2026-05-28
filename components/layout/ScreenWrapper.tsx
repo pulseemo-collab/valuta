@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useMemo } from 'react';
 import {
   View,
   ScrollView,
@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { C } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 
 interface ScreenWrapperProps {
   children: ReactNode;
@@ -25,6 +25,8 @@ export function ScreenWrapper({
   contentStyle,
   padded = true,
 }: ScreenWrapperProps) {
+  const C = useThemeColors();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
   const maxWidth = isWeb ? Math.min(width, 900) : '100%';
@@ -66,21 +68,12 @@ export function ScreenWrapper({
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  inner: {
-    flex: 1,
-  },
-  padded: {
-    paddingHorizontal: 20,
-  },
-});
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: C.bg },
+    scroll: { flex: 1 },
+    scrollContent: { flexGrow: 1 },
+    inner: { flex: 1 },
+    padded: { paddingHorizontal: 20 },
+  });
+}

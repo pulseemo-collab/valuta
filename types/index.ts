@@ -1,4 +1,6 @@
 export type Currency = 'ALL' | 'EUR' | 'USD';
+export type AppTheme = 'dark' | 'light' | 'system';
+export type AppLanguage = 'sq' | 'en';
 
 export type RecurringFrequency = 'weekly' | 'monthly' | 'yearly';
 
@@ -106,6 +108,9 @@ export interface AppState {
   subscriptions: Subscription[];
   recurringSettings: RecurringSettings;
   goals: FinancialGoal[];
+  theme: AppTheme;
+  language: AppLanguage;
+  lastSyncTime: string | null;
 }
 
 export type AppAction =
@@ -132,4 +137,7 @@ export type AppAction =
   | { type: 'SET_RECURRING_SETTINGS'; payload: Partial<RecurringSettings> }
   | { type: 'ADD_GOAL'; payload: FinancialGoal }
   | { type: 'UPDATE_GOAL'; payload: { id: string; updates: Partial<FinancialGoal> } }
-  | { type: 'REMOVE_GOAL'; payload: string };
+  | { type: 'REMOVE_GOAL'; payload: string }
+  | { type: 'SET_THEME'; payload: AppTheme }
+  | { type: 'SET_LANGUAGE'; payload: AppLanguage }
+  | { type: 'SET_LAST_SYNC_TIME'; payload: string | null };

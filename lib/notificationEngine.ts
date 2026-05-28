@@ -1,5 +1,5 @@
-import type { Expense, Budget } from '@/types';
-import { getTotalALL, formatCurrency } from '@/lib/utils';
+import type { Expense, Budget, Currency } from '@/types';
+import { getTotalALL, formatInPreferred } from '@/lib/utils';
 import type { NotificationPrefs } from '@/lib/notificationPrefs';
 
 export type NotificationKind =
@@ -30,7 +30,8 @@ function daysSince(dateStr: string): number {
 export function computePendingNotifications(
   expenses: Expense[],
   budget: Budget,
-  prefs: NotificationPrefs
+  prefs: NotificationPrefs,
+  preferred: Currency = 'ALL'
 ): PendingNotification[] {
   if (!prefs.enabled) return [];
 
@@ -70,7 +71,7 @@ export function computePendingNotifications(
           kind: 'budget_danger',
           icon: 'trending-up-outline',
           title: 'Je pranë limitit!',
-          body: `Me këtë ritëm do tejkalosh buxhetin me ${formatCurrency(Math.round(projectedOverrun), 'ALL')}.`,
+          body: `Me këtë ritëm do tejkalosh buxhetin me ${formatInPreferred(Math.round(projectedOverrun), preferred)}.`,
           severity: 'warning',
         });
       } else if (pctUsed >= 80) {

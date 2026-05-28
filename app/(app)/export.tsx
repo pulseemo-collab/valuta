@@ -15,7 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useStore } from '@/lib/store';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 import {
   exportData,
   buildFilename,
@@ -24,18 +25,22 @@ import {
   type ExportFormat,
   type ExportData,
 } from '@/lib/exportUtils';
-
-const PERIOD_LABELS: Record<ExportPeriod, string> = {
-  this_month: 'Ky muaj',
-  last_month: 'Muaji i kaluar',
-  last_3_months: '3 muajt',
-  all_time: 'Gjithë kohën',
-  custom: 'Periudhë',
-};
+import { useTranslation } from '@/lib/i18n';
 
 export default function Export() {
   const router = useRouter();
+  const C = useThemeColors();
+  const { t, lang } = useTranslation();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
   const { state } = useStore();
+
+  const PERIOD_LABELS: Record<ExportPeriod, string> = {
+    this_month: t('exportPeriodThisMonth'),
+    last_month: t('exportPeriodLastMonth'),
+    last_3_months: t('exportPeriodLast3Months'),
+    all_time: t('exportPeriodAllTime'),
+    custom: t('exportPeriodCustom'),
+  };
 
   const [period, setPeriod] = useState<ExportPeriod>('this_month');
   const [customStart, setCustomStart] = useState('');
@@ -57,11 +62,11 @@ export default function Export() {
     if (period === 'custom') {
       const dateRe = /^\d{4}-\d{2}-\d{2}$/;
       if (!dateRe.test(customStart) || !dateRe.test(customEnd)) {
-        setResult({ success: false, msg: 'Formati i datës duhet të jetë YYYY-MM-DD.' });
+        setResult({ success: false, msg: t('exportInvalidDate') });
         return;
       }
       if (new Date(customStart) > new Date(customEnd)) {
-        setResult({ success: false, msg: 'Data e fillimit duhet të jetë para datës së mbarimit.' });
+        setResult({ success: false, msg: t('exportStartBeforeEnd') });
         return;
       }
     }
@@ -98,10 +103,10 @@ export default function Export() {
       msg: res.success
         ? format === 'pdf'
           ? Platform.OS === 'web'
-            ? 'Raporti u hap. Printo ose shkarko HTML nga faqja e re.'
-            : 'Raporti u ndërtua. Hap web-in për PDF të plotë.'
-          : 'CSV u shkarkua me sukses.'
-        : (res.error ?? 'Ndodhi një gabim. Provo përsëri.'),
+            ? (lang === 'en' ? 'Report opened. Print or download HTML from the new tab.' : 'Raporti u hap. Printo ose shkarko HTML nga faqja e re.')
+            : (lang === 'en' ? 'Report built. Open the web for full PDF.' : 'Raporti u ndërtua. Hap web-in për PDF të plotë.')
+          : (lang === 'en' ? 'CSV downloaded successfully.' : 'CSV u shkarkua me sukses.')
+        : (res.error ?? (lang === 'en' ? 'An error occurred. Try again.' : 'Ndodhi një gabim. Provo përsëri.')),
     });
   };
 
@@ -115,12 +120,12 @@ export default function Export() {
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.75}>
             <Ionicons name="chevron-back" size={20} color={C.textSub} />
           </TouchableOpacity>
-          <Text style={styles.title}>Eksportimi</Text>
+          <Text style={styles.title}>{t('exportTitle')}</Text>
         </View>
 
         {/* Period */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>PERIUDHA</Text>
+          <Text style={styles.sectionLabel}>{lang === 'en' ? 'PERIOD' : 'PERIUDHA'}</Text>
           <View style={styles.chipRow}>
             {(Object.keys(PERIOD_LABELS) as ExportPeriod[]).map((p) => (
               <TouchableOpacity
@@ -147,7 +152,7 @@ export default function Export() {
           {period === 'custom' && (
             <View style={styles.customDateRow}>
               <View style={styles.customDateField}>
-                <Text style={styles.customDateLabel}>Nga</Text>
+                <Text style={styles.customDateLabel}>{lang === 'en' ? 'From' : 'Nga'}</Text>
                 <TextInput
                   style={styles.customDateInput}
                   value={customStart}
@@ -160,7 +165,7 @@ export default function Export() {
               </View>
               <Ionicons name="arrow-forward" size={14} color={C.textMuted} style={{ marginTop: 22 }} />
               <View style={styles.customDateField}>
-                <Text style={styles.customDateLabel}>Deri</Text>
+                <Text style={styles.customDateLabel}>{lang === 'en' ? 'To' : 'Deri'}</Text>
                 <TextInput
                   style={styles.customDateInput}
                   value={customEnd}
@@ -177,7 +182,7 @@ export default function Export() {
 
         {/* Format */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>FORMATI</Text>
+          <Text style={styles.sectionLabel}>{lang === 'en' ? 'FORMAT' : 'FORMATI'}</Text>
           <View style={styles.formatRow}>
             {(['pdf', 'csv'] as ExportFormat[]).map((f) => {
               const isActive = format === f;
@@ -220,7 +225,7 @@ export default function Export() {
                     {f === 'pdf' ? 'PDF' : 'CSV'}
                   </Text>
                   <Text style={styles.formatSub}>
-                    {isPdf ? 'Raport i formatuar' : 'Tabelë Excel/Sheets'}
+                    {isPdf ? (lang === 'en' ? 'Formatted report' : 'Raport i formatuar') : (lang === 'en' ? 'Excel/Sheets table' : 'Tabelë Excel/Sheets')}
                   </Text>
                   {isActive && (
                     <View style={[styles.formatCheck, { backgroundColor: isPdf ? C.primary : C.accent }]}>
@@ -235,13 +240,13 @@ export default function Export() {
 
         {/* Include toggles */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>PËRFSHI</Text>
+          <Text style={styles.sectionLabel}>{lang === 'en' ? 'INCLUDE' : 'PËRFSHI'}</Text>
           <View style={styles.includeCard}>
             {([
               {
                 key: 'expenses',
-                label: 'Shpenzimet',
-                sub: 'Lista e transaksioneve',
+                label: lang === 'en' ? 'Expenses' : 'Shpenzimet',
+                sub: lang === 'en' ? 'Transaction list' : 'Lista e transaksioneve',
                 icon: 'receipt-outline',
                 color: C.warning,
                 val: includeExpenses,
@@ -249,8 +254,8 @@ export default function Export() {
               },
               {
                 key: 'budget',
-                label: 'Buxheti',
-                sub: 'Limiti dhe progresi',
+                label: lang === 'en' ? 'Budget' : 'Buxheti',
+                sub: lang === 'en' ? 'Limit and progress' : 'Limiti dhe progresi',
                 icon: 'wallet-outline',
                 color: C.primary,
                 val: includeBudget,
@@ -258,8 +263,8 @@ export default function Export() {
               },
               {
                 key: 'subscriptions',
-                label: 'Abonimet',
-                sub: 'Shërbimet periodik',
+                label: lang === 'en' ? 'Subscriptions' : 'Abonimet',
+                sub: lang === 'en' ? 'Recurring services' : 'Shërbimet periodik',
                 icon: 'repeat-outline',
                 color: C.accentLight,
                 val: includeSubscriptions,
@@ -267,8 +272,8 @@ export default function Export() {
               },
               {
                 key: 'goals',
-                label: 'Qëllimet',
-                sub: 'Progresi i kursimeve',
+                label: lang === 'en' ? 'Goals' : 'Qëllimet',
+                sub: lang === 'en' ? 'Savings progress' : 'Progresi i kursimeve',
                 icon: 'trophy-outline',
                 color: '#A78BFA',
                 val: includeGoals,
@@ -301,10 +306,12 @@ export default function Export() {
         {/* Expense mode — only when expenses included */}
         {includeExpenses && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>SHPENZIMET</Text>
+            <Text style={styles.sectionLabel}>{lang === 'en' ? 'EXPENSES' : 'SHPENZIMET'}</Text>
             <View style={styles.modeChipRow}>
               {(['personal', 'business', 'both'] as const).map((m) => {
-                const labels = { personal: 'Personal', business: 'Biznes', both: 'Të dyja' };
+                const labels = lang === 'en'
+                  ? { personal: 'Personal', business: 'Business', both: 'Both' }
+                  : { personal: 'Personal', business: 'Biznes', both: 'Të dyja' };
                 const isActive = expenseMode === m;
                 return (
                   <TouchableOpacity
@@ -373,7 +380,7 @@ export default function Export() {
               <Ionicons name="share-outline" size={17} color={canExport ? C.white : C.textMuted} />
             )}
             <Text style={[styles.exportBtnText, !canExport && { color: C.textMuted }]}>
-              {isExporting ? 'Duke eksportuar...' : 'Shpërnda raportin'}
+              {isExporting ? (lang === 'en' ? 'Exporting...' : 'Duke eksportuar...') : (lang === 'en' ? 'Export report' : 'Shpërnda raportin')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -382,17 +389,17 @@ export default function Export() {
         <View style={styles.futureSection}>
           <View style={styles.futureTitleRow}>
             <Ionicons name="mail-outline" size={14} color={C.textFaint} />
-            <Text style={styles.futureTitle}>Dërgim me email</Text>
+            <Text style={styles.futureTitle}>{t('settingsEmailReports')}</Text>
             <View style={styles.futureBadge}>
-              <Text style={styles.futureBadgeText}>SE SHPEJTI</Text>
+              <Text style={styles.futureBadgeText}>{lang === 'en' ? 'SOON' : 'SE SHPEJTI'}</Text>
             </View>
           </View>
           <Text style={styles.futureSub}>
-            Planifiko raporte automatike javore ose mujore direkt në emailin tënd.
+            {lang === 'en' ? 'Schedule automatic weekly or monthly reports directly to your email.' : 'Planifiko raporte automatike javore ose mujore direkt në emailin tënd.'}
           </Text>
           <View style={styles.futurePlaceholderBtn}>
             <Ionicons name="calendar-outline" size={14} color={C.textFaint} />
-            <Text style={styles.futurePlaceholderText}>Planifiko raporte automatike</Text>
+            <Text style={styles.futurePlaceholderText}>{lang === 'en' ? 'Schedule automatic reports' : 'Planifiko raporte automatike'}</Text>
             <Ionicons name="lock-closed" size={12} color={C.textFaint} />
           </View>
         </View>
@@ -403,7 +410,8 @@ export default function Export() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: 20, paddingTop: 12, gap: 20 },
 
@@ -591,4 +599,5 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
   futurePlaceholderText: { flex: 1, fontSize: 12, color: C.textFaint, fontWeight: '600' },
-});
+  });
+}

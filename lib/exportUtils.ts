@@ -1,6 +1,6 @@
 import { Platform, Share } from 'react-native';
 import type { Expense, Subscription, FinancialGoal, Budget, AppMode } from '@/types';
-import { formatCurrency } from '@/lib/utils';
+import { convertToALL } from '@/constants/currencies';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -273,8 +273,7 @@ export function generateReportHTML(data: ExportData, opts: ExportOptions): strin
   const subMonthly = data.subscriptions
     .filter((s) => s.isActive)
     .reduce((sum, s) => {
-      const rate = s.currency === 'EUR' ? 108 : s.currency === 'USD' ? 100 : 1;
-      const inAll = s.amount * rate;
+      const inAll = convertToALL(s.amount, s.currency);
       if (s.frequency === 'weekly') return sum + inAll * 4.33;
       if (s.frequency === 'yearly') return sum + inAll / 12;
       return sum + inAll;
@@ -309,11 +308,13 @@ export function generateReportHTML(data: ExportData, opts: ExportOptions): strin
     const pct = g.targetAmount > 0
       ? Math.min((g.savedAmount / g.targetAmount) * 100, 100)
       : 0;
+    const savedALL = convertToALL(g.savedAmount, g.currency);
+    const targetALL = convertToALL(g.targetAmount, g.currency);
     return `
     <tr>
       <td>${g.title}</td>
-      <td>${fmtALL(g.savedAmount)}</td>
-      <td>${fmtALL(g.targetAmount)}</td>
+      <td>${fmtALL(savedALL)}</td>
+      <td>${fmtALL(targetALL)}</td>
       <td>
         <div style="height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;margin-bottom:3px;">
           <div style="height:100%;width:${pct.toFixed(1)}%;background:${g.color};border-radius:3px;print-color-adjust:exact;-webkit-print-color-adjust:exact;"></div>
@@ -490,6 +491,7 @@ ${opts.includeGoals && data.goals.length > 0 ? `
 // ── Platform-aware export ─────────────────────────────────────────────────────
 
 function triggerWebDownload(content: string, filename: string, mime: string): void {
+  if (Platform.OS !== 'web') return;
   const g = globalThis as any;
   const blob = new g.Blob([content], { type: mime });
   const url = g.URL.createObjectURL(blob);
@@ -503,6 +505,7 @@ function triggerWebDownload(content: string, filename: string, mime: string): vo
 }
 
 function triggerWebPrint(html: string, filename: string): void {
+  if (Platform.OS !== 'web') return;
   const g = globalThis as any;
 
   // Inject a floating action bar + auto-print script into the report HTML.

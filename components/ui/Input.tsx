@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useState, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -9,7 +9,7 @@ import {
   TextStyle,
   KeyboardTypeOptions,
 } from 'react-native';
-import { C } from '@/constants/colors';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 
 interface InputProps {
   value: string;
@@ -50,6 +50,8 @@ export function Input({
   style,
   containerStyle,
 }: InputProps) {
+  const C = useThemeColors();
+  const styles = useMemo(() => makeStyles(C), [C]);
   const [focused, setFocused] = useState(false);
 
   return (
@@ -94,62 +96,64 @@ export function Input({
   );
 }
 
-const styles = StyleSheet.create({
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: C.textSub,
-    marginBottom: 8,
-    letterSpacing: 0.2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.elevated,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    paddingHorizontal: 14,
-    minHeight: 54,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  rowFocused: {
-    borderColor: C.primary,
-    backgroundColor: C.card,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  rowDisabled: {
-    opacity: 0.48,
-  },
-  iconLeft: {
-    marginRight: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconRight: {
-    marginLeft: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: C.text,
-    paddingVertical: 12,
-  },
-  hint: {
-    fontSize: 12,
-    color: C.textMuted,
-    marginTop: 7,
-    paddingHorizontal: 2,
-    lineHeight: 18,
-  },
-});
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
+    label: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: C.textSub,
+      marginBottom: 8,
+      letterSpacing: 0.2,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: C.elevated,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: C.border,
+      paddingHorizontal: 14,
+      minHeight: 54,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.18,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    rowFocused: {
+      borderColor: C.primary,
+      backgroundColor: C.card,
+      shadowColor: C.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.22,
+      shadowRadius: 12,
+      elevation: 5,
+    },
+    rowDisabled: {
+      opacity: 0.48,
+    },
+    iconLeft: {
+      marginRight: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    iconRight: {
+      marginLeft: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    input: {
+      flex: 1,
+      fontSize: 15,
+      color: C.text,
+      paddingVertical: 12,
+    },
+    hint: {
+      fontSize: 12,
+      color: C.textMuted,
+      marginTop: 7,
+      paddingHorizontal: 2,
+      lineHeight: 18,
+    },
+  });
+}

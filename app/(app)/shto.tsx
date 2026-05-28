@@ -19,9 +19,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '@/lib/store';
-import { CATEGORIES } from '@/constants/categories';
+import { CATEGORIES, getCategoryName } from '@/constants/categories';
 import { CURRENCIES } from '@/constants/currencies';
-import { C, GRADIENTS } from '@/constants/colors';
+import { GRADIENTS } from '@/constants/colors';
+import { useTranslation } from '@/lib/i18n';
+import { useThemeColors, type ColorPalette } from '@/lib/ThemeContext';
 import { BUSINESS_CATEGORIES } from '@/constants/businessCategories';
 import { RECURRING_SUBSCRIPTION_KEYWORDS } from '@/constants/subscriptions';
 import { parseExpense } from '@/lib/parseExpense';
@@ -55,6 +57,9 @@ const ALL_CATS = [...CATEGORIES, ...BUSINESS_CATEGORIES];
 
 export default function ShtoShpenzim() {
   const router = useRouter();
+  const { t, lang } = useTranslation();
+  const C = useThemeColors();
+  const styles = React.useMemo(() => makeStyles(C), [C]);
   const { addExpense, clearSaveError, state, addSubscription } = useStore();
   const activeMode = state.mode;
   const displayCategories = activeMode === 'business' ? BUSINESS_CATEGORIES : CATEGORIES;
@@ -365,7 +370,7 @@ export default function ShtoShpenzim() {
     const text = voiceTranscriptRef.current.trim();
     if (!text) {
       setVoiceState('error');
-      setVoiceError('Nuk u dëgjua asgjë. Provo sërish.');
+      setVoiceError(t('shtoVoiceNoSpeech'));
       setTimeout(() => {
         setVoiceState(prev => prev === 'error' ? 'idle' : prev);
         setVoiceError(null);
@@ -380,7 +385,7 @@ export default function ShtoShpenzim() {
   const startVoice = () => {
     if (!voiceSupported) {
       setVoiceState('error');
-      setVoiceError('Zëri nuk mbështetet. Provo Chrome ose Edge.');
+      setVoiceError(t('shtoVoiceNotSupported'));
       setTimeout(() => {
         setVoiceState(prev => prev === 'error' ? 'idle' : prev);
         setVoiceError(null);
@@ -406,15 +411,15 @@ export default function ShtoShpenzim() {
         setVoiceState('error');
         switch (error) {
           case 'permission_denied':
-            setVoiceError('Lejo mikrofonin në cilësimet e shfletuesit.'); break;
+            setVoiceError(t('shtoVoiceMicPermission')); break;
           case 'no_speech':
-            setVoiceError('Nuk u dëgjua asgjë. Provo sërish.'); break;
+            setVoiceError(t('shtoVoiceNoSpeech')); break;
           case 'not_supported':
-            setVoiceError('Zëri nuk mbështetet. Provo Chrome ose Edge.'); break;
+            setVoiceError(t('shtoVoiceNotSupported')); break;
           case 'network':
-            setVoiceError('Problem rrjeti. Kontrollo lidhjen.'); break;
+            setVoiceError(t('shtoVoiceNetworkError')); break;
           default:
-            setVoiceError('Gabim. Provo sërish.');
+            setVoiceError(t('shtoVoiceGenericError'));
         }
         setTimeout(() => {
           setVoiceState(prev => prev === 'error' ? 'idle' : prev);
@@ -447,12 +452,12 @@ export default function ShtoShpenzim() {
     const trimmed = amount.trim();
     const num = parseFloat(trimmed.replace(',', '.'));
     if (!trimmed || isNaN(num)) {
-      setAmountError('Shkruani një shumë të vlefshme.');
+      setAmountError(t('shtoAmountError'));
       shakeAmountField();
       return;
     }
     if (num <= 0) {
-      setAmountError('Shuma duhet të jetë pozitive.');
+      setAmountError(t('shtoAmountPositive'));
       shakeAmountField();
       return;
     }
@@ -577,7 +582,7 @@ export default function ShtoShpenzim() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Animated.View style={[styles.headerDot, { backgroundColor: selectedCategory.color }]} />
-            <Text style={styles.headerTitle}>Shto Shpenzim</Text>
+            <Text style={styles.headerTitle}>{t('shtoTitle')}</Text>
           </View>
           {activeMode === 'business' ? (
             <View style={styles.bizModeTag}>
@@ -631,7 +636,7 @@ export default function ShtoShpenzim() {
                       <Ionicons name="mic" size={10} color={C.danger} />
                     </Animated.View>
                     <Text style={[styles.quickBadgeText, styles.quickBadgeTextVoice]}>
-                      DUKE DËGJUAR...
+                      {t('shtoListening')}
                     </Text>
                   </>
                 ) : (
@@ -642,7 +647,7 @@ export default function ShtoShpenzim() {
                       color={aiState === 'success' ? C.primary : C.warning}
                     />
                     <Text style={[styles.quickBadgeText, aiState === 'success' && styles.quickBadgeTextAI]}>
-                      {aiState === 'success' ? 'AI ANALIZOI' : 'HYRJE E SHPEJTË'}
+                      {aiState === 'success' ? t('shtoAiAnalyzed') : t('shtoQuickBadge')}
                     </Text>
                   </>
                 )}
@@ -659,7 +664,7 @@ export default function ShtoShpenzim() {
                     activeOpacity={0.75}
                   >
                     <Ionicons name="mic-outline" size={11} color={C.textMuted} />
-                    <Text style={[styles.aiBtnSmallText, { color: C.textMuted }]}>ZË</Text>
+                    <Text style={[styles.aiBtnSmallText, { color: C.textMuted }]}>{t('shtoVoiceLabel')}</Text>
                   </TouchableOpacity>
                 )}
                 {voiceState === 'listening' && (
@@ -672,7 +677,7 @@ export default function ShtoShpenzim() {
                     <Animated.View style={{ transform: [{ scale: micPulseAnim }] }}>
                       <Ionicons name="mic" size={11} color={C.danger} />
                     </Animated.View>
-                    <Text style={[styles.aiBtnSmallText, { color: C.danger }]}>NDALOJ</Text>
+                    <Text style={[styles.aiBtnSmallText, { color: C.danger }]}>{t('shtoVoiceStop')}</Text>
                   </TouchableOpacity>
                 )}
                 {voiceState === 'success' && (
@@ -704,7 +709,7 @@ export default function ShtoShpenzim() {
                     activeOpacity={0.75}
                   >
                     <Ionicons name="refresh-outline" size={11} color={C.textMuted} />
-                    <Text style={[styles.aiBtnSmallText, { color: C.textMuted }]}>Riprovo</Text>
+                    <Text style={[styles.aiBtnSmallText, { color: C.textMuted }]}>{t('shtoRetry')}</Text>
                   </TouchableOpacity>
                 )}
                 {/* Loading spinner */}
@@ -732,8 +737,8 @@ export default function ShtoShpenzim() {
               onSubmitEditing={handleAiParse}
               placeholder={
                 activeMode === 'business'
-                  ? 'Furnitor 5000 lek  ·  Marketing 200 euro  ·  Shërbim IT 1500'
-                  : 'Kafe 150 lek  ·  Netflix 15 euro  ·  Naftë 3000 lek dje'
+                  ? t('shtoQuickPlaceholderBiz')
+                  : t('shtoQuickPlaceholderPersonal')
               }
               placeholderTextColor={C.textFaint}
               onFocus={() => setQuickFocused(true)}
@@ -748,7 +753,7 @@ export default function ShtoShpenzim() {
             {aiState === 'loading' && (
               <View style={styles.aiLoadingRow}>
                 <ActivityIndicator size="small" color={C.primary} />
-                <Text style={styles.aiLoadingText}>AI po analizon...</Text>
+                <Text style={styles.aiLoadingText}>{t('shtoAiAnalyzing')}</Text>
               </View>
             )}
 
@@ -762,7 +767,7 @@ export default function ShtoShpenzim() {
                   style={styles.voiceRetryBtn}
                   hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}
                 >
-                  <Text style={styles.voiceRetryText}>Riprovo</Text>
+                  <Text style={styles.voiceRetryText}>{t('shtoRetry')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -797,7 +802,7 @@ export default function ShtoShpenzim() {
                   return (
                     <View style={[styles.quickPreviewChip, { backgroundColor: cat.bgColor, borderColor: cat.color + '44' }]}>
                       <Ionicons name={cat.icon as any} size={11} color={cat.color} />
-                      <Text style={[styles.quickPreviewChipText, { color: cat.color }]}>{cat.name}</Text>
+                      <Text style={[styles.quickPreviewChipText, { color: cat.color }]}>{getCategoryName(cat.id, lang)}</Text>
                     </View>
                   );
                 })()}
@@ -821,7 +826,7 @@ export default function ShtoShpenzim() {
                       {previewData.date === (() => {
                         const d = new Date(); d.setDate(d.getDate()-1);
                         return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
-                      })() ? 'Dje' : 'Sot'}
+                      })() ? t('histDje') : t('histSot')}
                     </Text>
                   </View>
                 )}
@@ -838,7 +843,7 @@ export default function ShtoShpenzim() {
             {/* Hint — shown only when empty */}
             {quickText.length === 0 && (
               <Text style={styles.quickHint}>
-                Shembuj: "Kafe 150 lek" · "Netflix 15 euro" · "Naftë 3000 lek dje"
+                {t('shtoQuickHint')}
               </Text>
             )}
           </View>
@@ -869,7 +874,7 @@ export default function ShtoShpenzim() {
               end={{ x: 0, y: 1 }}
             />
 
-            <Text style={styles.sectionLabel}>SHUMA</Text>
+            <Text style={styles.sectionLabel}>{t('shtoAmount')}</Text>
 
             <TouchableOpacity
               activeOpacity={1}
@@ -954,7 +959,7 @@ export default function ShtoShpenzim() {
           {/* ── Category ── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>KATEGORIA</Text>
+              <Text style={styles.sectionLabel}>{t('shtoCategory')}</Text>
               <View style={[styles.sectionDot, { backgroundColor: selectedCategory.color }]} />
             </View>
             <View style={styles.catGrid}>
@@ -988,7 +993,7 @@ export default function ShtoShpenzim() {
                       <Ionicons name={cat.icon as any} size={18} color={cat.color} />
                     </View>
                     <Text style={[styles.catName, isActive && { color: cat.color, fontWeight: '700' }]} numberOfLines={1}>
-                      {cat.name}
+                      {getCategoryName(cat.id, lang)}
                     </Text>
 
                     {/* Animated check badge */}
@@ -1008,7 +1013,7 @@ export default function ShtoShpenzim() {
 
           {/* ── Details (Note + Date) ── */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>DETAJE</Text>
+            <Text style={styles.sectionLabel}>{t('shtoDetails')}</Text>
             <View style={styles.detailsCard}>
               {/* Note row */}
               <View style={[styles.detailRow, noteFocused && styles.detailRowFocused]}>
@@ -1019,7 +1024,7 @@ export default function ShtoShpenzim() {
                   style={styles.detailInput}
                   value={note}
                   onChangeText={setNote}
-                  placeholder="Shënim... (opsional)"
+                  placeholder={t('shtoNote')}
                   placeholderTextColor={C.textMuted}
                   maxLength={100}
                   onFocus={() => setNoteFocused(true)}
@@ -1051,7 +1056,7 @@ export default function ShtoShpenzim() {
                       />
                     )}
                     <Text style={[styles.dateChipText, date === today && styles.dateChipTextActive]}>
-                      Sot
+                      {t('histSot')}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -1065,7 +1070,7 @@ export default function ShtoShpenzim() {
                       />
                     )}
                     <Text style={[styles.dateChipText, date === yesterday && styles.dateChipTextActive]}>
-                      Dje
+                      {t('histDje')}
                     </Text>
                   </Pressable>
                   <TextInput
@@ -1084,7 +1089,7 @@ export default function ShtoShpenzim() {
                 <View style={styles.fieldErrorRow}>
                   <Ionicons name="alert-circle-outline" size={12} color={C.danger} />
                   <Text style={styles.fieldErrorText}>
-                    Formati i datës nuk është i vlefshëm (YYYY-MM-DD)
+                    {t('shtoDateError')}
                   </Text>
                 </View>
               )}
@@ -1094,7 +1099,7 @@ export default function ShtoShpenzim() {
           {/* ── Recurring / Abonim ── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>PERIODIK</Text>
+              <Text style={styles.sectionLabel}>{t('shtoRecurring')}</Text>
               <View style={[styles.sectionDot, { backgroundColor: isRecurring ? C.accent : C.textFaint }]} />
             </View>
 
@@ -1110,14 +1115,14 @@ export default function ShtoShpenzim() {
                 />
                 <Ionicons name="repeat-outline" size={15} color={C.accentLight} />
                 <Text style={styles.recurBannerText}>
-                  Ky shpenzim duket periodik. Dëshiron ta ruash si abonim?
+                  {t('shtoRecurringSuggestFull')}
                 </Text>
                 <TouchableOpacity
                   onPress={() => { setIsRecurring(true); setSuggestDismissed(true); }}
                   style={styles.recurBannerYes}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.recurBannerYesText}>Po</Text>
+                  <Text style={styles.recurBannerYesText}>{t('shtoRecurringSuggestYes')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => setSuggestDismissed(true)}
@@ -1140,15 +1145,15 @@ export default function ShtoShpenzim() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.detailInput, { paddingVertical: 0, fontSize: 15 }]}>
-                    Shpenzim periodik
+                    {t('shtoPeriodicLabel')}
                   </Text>
                   {isRecurring && (
                     <Text style={{ fontSize: 11, color: C.accentLight, marginTop: 2 }}>
                       {recurringFrequency === 'weekly'
-                        ? 'Çdo javë'
+                        ? t('shtoFreqEveryWeek')
                         : recurringFrequency === 'monthly'
-                        ? 'Çdo muaj'
-                        : 'Çdo vit'}
+                        ? t('shtoFreqEveryMonth')
+                        : t('shtoFreqEveryYear')}
                     </Text>
                   )}
                 </View>
@@ -1192,10 +1197,10 @@ export default function ShtoShpenzim() {
                             ]}
                           >
                             {freq === 'weekly'
-                              ? 'Javore'
+                              ? t('repFreqWeekly')
                               : freq === 'monthly'
-                              ? 'Mujore'
-                              : 'Vjetore'}
+                              ? t('repFreqMonthly')
+                              : t('repFreqYearly')}
                           </Text>
                         </Pressable>
                       ))}
@@ -1228,12 +1233,12 @@ export default function ShtoShpenzim() {
                 {loading ? (
                   <View style={styles.submitInner}>
                     <Ionicons name="hourglass-outline" size={18} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.submitText}>Duke ruajtur...</Text>
+                    <Text style={styles.submitText}>{t('saving')}</Text>
                   </View>
                 ) : (
                   <View style={styles.submitInner}>
                     <Ionicons name="add-circle-outline" size={20} color={C.white} />
-                    <Text style={styles.submitText}>Shto Shpenzimin</Text>
+                    <Text style={styles.submitText}>{t('shtoAddBtn')}</Text>
                   </View>
                 )}
               </LinearGradient>
@@ -1285,12 +1290,12 @@ export default function ShtoShpenzim() {
                 </LinearGradient>
               </View>
               <Text style={styles.successTitle}>
-                {cloudSaveFailed ? 'Ruajtur lokalisht' : 'U ruajt!'}
+                {cloudSaveFailed ? t('shtoSavingLocal') : t('shtoSaved')}
               </Text>
               <Text style={styles.successSub}>
                 {cloudSaveFailed
-                  ? 'Nuk u sinkronizua me cloud.'
-                  : `${selectedCurrency.symbol}${amount} · ${selectedCategory.name}`}
+                  ? t('shtoNotSynced')
+                  : `${selectedCurrency.symbol}${amount} · ${getCategoryName(category, lang)}`}
               </Text>
             </Animated.View>
 
@@ -1321,7 +1326,9 @@ interface ScanSectionProps {
 }
 
 function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
-  // 'done' with detected fields → success; 'done' or 'error' without → warn
+  const C = useThemeColors();
+  const scanStyles = React.useMemo(() => makeScanStyles(C), [C]);
+  const { t, lang } = useTranslation();
   const hasScanData = status === 'done' && result && countDetectedFields(result) > 0;
   const noData = (status === 'done' || status === 'error') && !hasScanData;
 
@@ -1341,7 +1348,7 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
           <View style={scanStyles.successIconWrap}>
             <Ionicons name="checkmark-circle" size={18} color={C.primary} />
           </View>
-          <Text style={[scanStyles.successTitle, { flex: 1 }]}>Fatura u lexua</Text>
+          <Text style={[scanStyles.successTitle, { flex: 1 }]}>{t('shtoScanSuccess')}</Text>
           <TouchableOpacity
             onPress={onReset}
             hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
@@ -1353,38 +1360,38 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
         {/* Structured preview: Dyqani / Totali / Artikujt / Kategoria */}
         <View style={scanStyles.previewGrid}>
           <View style={scanStyles.previewRow}>
-            <Text style={scanStyles.previewLabel}>Dyqani</Text>
+            <Text style={scanStyles.previewLabel}>{t('shtoScanStore')}</Text>
             <Text style={scanStyles.previewVal} numberOfLines={1}>
               {result.merchantName || '—'}
             </Text>
           </View>
           <View style={scanStyles.previewDivider} />
           <View style={scanStyles.previewRow}>
-            <Text style={scanStyles.previewLabel}>Totali</Text>
+            <Text style={scanStyles.previewLabel}>{t('shtoScanTotal')}</Text>
             <Text style={[scanStyles.previewVal, amountStr ? scanStyles.previewValAmount : null]}>
               {amountStr || '—'}
             </Text>
           </View>
           <View style={scanStyles.previewDivider} />
           <View style={[scanStyles.previewRow, result.items.length > 0 && { alignItems: 'flex-start', paddingTop: 10 }]}>
-            <Text style={[scanStyles.previewLabel, result.items.length > 0 && { paddingTop: 1 }]}>Artikujt</Text>
+            <Text style={[scanStyles.previewLabel, result.items.length > 0 && { paddingTop: 1 }]}>{t('shtoScanItems')}</Text>
             {result.items.length > 0 ? (
               <Text style={scanStyles.previewVal} numberOfLines={3}>
                 {result.items.slice(0, 5).map(i => i.toLowerCase()).join(', ')}
               </Text>
             ) : (
               <Text style={[scanStyles.previewVal, scanStyles.previewValMuted]}>
-                Artikujt nuk u lexuan qartë
+                {t('shtoScanItemsNotRead')}
               </Text>
             )}
           </View>
           <View style={scanStyles.previewDivider} />
           <View style={scanStyles.previewRow}>
-            <Text style={scanStyles.previewLabel}>Kategoria</Text>
+            <Text style={scanStyles.previewLabel}>{t('shtoScanCategoryLabel')}</Text>
             {catInfo && p.detectedCategory ? (
               <View style={[scanStyles.previewCatChip, { borderColor: catInfo.color + '55', backgroundColor: catInfo.bgColor }]}>
                 <Ionicons name={catInfo.icon as any} size={11} color={catInfo.color} />
-                <Text style={[scanStyles.previewCatChipText, { color: catInfo.color }]}>{catInfo.name}</Text>
+                <Text style={[scanStyles.previewCatChipText, { color: catInfo.color }]}>{getCategoryName(catInfo.id, lang)}</Text>
               </View>
             ) : (
               <Text style={[scanStyles.previewVal, scanStyles.previewValMuted]}>—</Text>
@@ -1396,8 +1403,8 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
           <Ionicons name="information-circle-outline" size={13} color={C.warning} />
           <Text style={scanStyles.confirmText}>
             {result.uncertainAmount
-              ? 'Kontrollo shumën para ruajtjes'
-              : 'Kontrollo të dhënat para ruajtjes'}
+              ? t('shtoScanCheckAmount')
+              : t('shtoScanCheckData')}
           </Text>
         </View>
       </View>
@@ -1413,10 +1420,10 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
           <Ionicons name="scan-outline" size={16} color={C.warning} />
           <View style={{ flex: 1 }}>
             <Text style={scanStyles.noDataTitle}>
-              {hasRawText ? 'Nuk u gjet shuma' : 'Nuk u gjet tekst'}
+              {hasRawText ? t('shtoScanNoAmount') : t('shtoScanNoText')}
             </Text>
             <Text style={scanStyles.noDataSub}>
-              {hasRawText ? 'Kontrollo dhe plotëso manualisht' : 'Provo me imazh më të qartë'}
+              {hasRawText ? t('shtoScanCheckManual') : t('shtoScanTryClearer')}
             </Text>
           </View>
           <TouchableOpacity
@@ -1424,7 +1431,7 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
             onPress={() => Platform.OS === 'web' ? onScan('gallery') : onScan('camera')}
             activeOpacity={0.75}
           >
-            <Text style={scanStyles.retryText}>Provo</Text>
+            <Text style={scanStyles.retryText}>{t('shtoScanRetry')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={onReset}
@@ -1435,7 +1442,7 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
         </View>
         {hasRawText && (
           <View style={scanStyles.rawTextBox}>
-            <Text style={scanStyles.rawTextLabel}>Tekst i zbuluar:</Text>
+            <Text style={scanStyles.rawTextLabel}>{t('shtoScanRawTextLabel')}</Text>
             <Text style={scanStyles.rawTextContent} numberOfLines={3}>{rawText.slice(0, 120)}</Text>
           </View>
         )}
@@ -1449,9 +1456,9 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
       <View style={scanStyles.idleHeader}>
         <View style={scanStyles.badge}>
           <Ionicons name="scan-outline" size={10} color={C.accentLight} />
-          <Text style={scanStyles.badgeText}>SKANO FATURËN</Text>
+          <Text style={scanStyles.badgeText}>{t('shtoScanBadge')}</Text>
         </View>
-        <Text style={scanStyles.hint}>Ngarko imazhin e faturës</Text>
+        <Text style={scanStyles.hint}>{t('shtoScanHint')}</Text>
       </View>
       <View style={scanStyles.btnRow}>
         {Platform.OS !== 'web' && (
@@ -1467,7 +1474,7 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
               end={{ x: 1, y: 1 }}
             />
             <Ionicons name="camera-outline" size={18} color={C.accentLight} />
-            <Text style={scanStyles.scanBtnText}>Kamera</Text>
+            <Text style={scanStyles.scanBtnText}>{t('shtoScanCamera')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -1487,7 +1494,7 @@ function ScanSection({ status, result, onScan, onReset }: ScanSectionProps) {
             color={C.accentLight}
           />
           <Text style={scanStyles.scanBtnText}>
-            {Platform.OS === 'web' ? 'Ngarko Imazh' : 'Galeria'}
+            {Platform.OS === 'web' ? t('shtoScanUpload') : t('shtoScanGallery')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1504,6 +1511,9 @@ interface ScanOverlayProps {
 }
 
 function ScanOverlay({ status, progress, progressLabel }: ScanOverlayProps) {
+  const C = useThemeColors();
+  const scanStyles = React.useMemo(() => makeScanStyles(C), [C]);
+  const { t } = useTranslation();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -1541,7 +1551,7 @@ function ScanOverlay({ status, progress, progressLabel }: ScanOverlayProps) {
     outputRange: ['0%', '100%'],
   });
 
-  const label = status === 'picking' ? 'Duke hapur...' : (progressLabel || 'Duke skanuar faturën...');
+  const label = status === 'picking' ? t('shtoScanOpening') : (progressLabel || t('shtoScanScanning'));
   const pct = status === 'scanning' && progress > 0 ? `${progress}%` : '';
 
   return (
@@ -1573,14 +1583,15 @@ function ScanOverlay({ status, progress, progressLabel }: ScanOverlayProps) {
           </View>
         )}
         {status !== 'scanning' && (
-          <Text style={scanStyles.overlaySub}>Prisni pak…</Text>
+          <Text style={scanStyles.overlaySub}>{t('shtoScanWait')}</Text>
         )}
       </View>
     </View>
   );
 }
 
-const scanStyles = StyleSheet.create({
+function makeScanStyles(C: ColorPalette) {
+  return StyleSheet.create({
   // Scan section card
   card: {
     backgroundColor: C.card,
@@ -1895,9 +1906,11 @@ const scanStyles = StyleSheet.create({
     fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
     lineHeight: 17,
   },
-});
+  });
+}
 
-const styles = StyleSheet.create({
+function makeStyles(C: ColorPalette) {
+  return StyleSheet.create({
   root: { flex: 1, backgroundColor: C.surface },
 
   header: {
@@ -2616,4 +2629,5 @@ const styles = StyleSheet.create({
     color: C.accentLight,
     letterSpacing: 1.1,
   },
-});
+  });
+}
