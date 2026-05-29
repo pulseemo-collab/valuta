@@ -1669,6 +1669,7 @@ export default function Cilesimet() {
           )}
         </View>
 
+      {/*
         {/* ── Biometric Diagnostics ── */}
         <View style={styles.legalItem}>
           <Text style={styles.legalItemTitle}>Biometric Diagnostics</Text>
@@ -1679,6 +1680,7 @@ export default function Cilesimet() {
               marginTop: 8, padding: 12, borderRadius: 10, gap: 6,
               backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
             }}>
+               */}
               {/*
               {([
                 ['Platform.OS', bioDiag.platform],
@@ -1696,8 +1698,10 @@ export default function Cilesimet() {
                 <Text style={{ fontSize: 11, color: C.danger, marginTop: 4 }}>Error: {bioDiag.error}</Text>
               )}
                 */}
-            </View>
+            
+            </View>  
           )}
+          
         </View>
       </InfoModal>
 
