@@ -778,15 +778,6 @@ function KeshillaSmartSection({ cards }: { cards: AdviceCard[] }) {
         })}
       </View>
 
-      {/* CTA */}
-      <TouchableOpacity
-        style={coachStyles.cta}
-        activeOpacity={0.72}
-        onPress={() => {}}
-      >
-        <Text style={coachStyles.ctaText}>{t('repSeeFullAnalysis')}</Text>
-        <Ionicons name="arrow-forward" size={13} color="#A78BFA" />
-      </TouchableOpacity>
     </Card>
   );
 }
@@ -862,17 +853,6 @@ function makeCoachStyles(C: ColorPalette) {
     fontWeight: '500',
     lineHeight: 19,
   },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  ctaText: { fontSize: 13, fontWeight: '700', color: '#A78BFA' },
   });
 }
 

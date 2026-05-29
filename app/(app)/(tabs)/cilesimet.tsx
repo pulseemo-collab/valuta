@@ -196,18 +196,19 @@ const THEME_OPTION_KEYS: { key: AppTheme; tKey: 'themeDark' | 'themeLight' | 'th
   { key: 'system', tKey: 'themeSystem', icon: 'phone-portrait-outline' },
 ];
 
-function formatLastSync(iso: string | null): string {
+function formatLastSync(iso: string | null, lang: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'Tani';
-  if (diffMins < 60) return `${diffMins} min më parë`;
+  const en = lang === 'en';
+  if (diffMins < 1) return en ? 'Just now' : 'Tani';
+  if (diffMins < 60) return en ? `${diffMins} min ago` : `${diffMins} min më parë`;
   const diffHrs = Math.floor(diffMins / 60);
-  if (diffHrs < 24) return `${diffHrs} orë më parë`;
+  if (diffHrs < 24) return en ? `${diffHrs} hr ago` : `${diffHrs} orë më parë`;
   const diffDays = Math.floor(diffHrs / 24);
-  return `${diffDays} ditë më parë`;
+  return en ? `${diffDays} days ago` : `${diffDays} ditë më parë`;
 }
 
 // ── makeStyles ────────────────────────────────────────────────────────────────
@@ -1644,7 +1645,7 @@ export default function Cilesimet() {
         </View>
 
         {[
-          { icon: 'time-outline' as const, label: t('lastSync'), value: formatLastSync(state.lastSyncTime) },
+          { icon: 'time-outline' as const, label: t('lastSync'), value: formatLastSync(state.lastSyncTime, lang) },
           { icon: 'receipt-outline' as const, label: lang === 'en' ? 'Saved expenses' : 'Shpenzime të ruajtura', value: `${state.expenses.length} ${lang === 'en' ? 'records' : 'rekorde'}` },
           { icon: 'wallet-outline' as const, label: lang === 'en' ? 'Budget saved' : 'Buxheti i ruajtur', value: state.budget.monthly > 0 ? (lang === 'en' ? 'Yes' : 'Po') : (lang === 'en' ? 'No' : 'Jo') },
           { icon: 'apps-outline' as const, label: t('repSubsTitle'), value: `${state.subscriptions.length} ${t('repSubsActive')}` },

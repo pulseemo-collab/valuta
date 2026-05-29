@@ -35,6 +35,11 @@ const sq = {
   authTermsLink: 'Kushtet e Shërbimit',
   authPrivacyLink: 'Politikën e Privatësisë',
   authFillFields: 'Ju lutem plotësoni të gjitha fushat.',
+  authPasswordTooShort: 'Fjalëkalimi duhet të ketë të paktën 6 karaktere.',
+  authConfirmLinkSent: 'Të dërguam një link konfirmimi tek',
+  authForgotSending: 'Duke dërguar...',
+  authForgotSent: 'Linku u dërgua! Kontrollo email-in tënd.',
+  authForgotEnterEmail: 'Shkruaj email-in tënd fillimisht.',
 
   // ── Common actions ───────────────────────────────────────────
   save: 'Ruaj',
@@ -544,6 +549,9 @@ const sq = {
   biometricLoginBtn: 'Hyr me biometrikë',
   biometricPrompt: 'Konfirmo identitetin tënd',
   biometricNotEnrolled: 'Nuk ka biometrikë të regjistruar. Shko te Cilësimet e pajisjes.',
+  biometricGateSubtitle: 'Konfirmo identitetin për të vazhduar',
+  biometricVerifying: 'Duke u verifikuar...',
+  biometricFailed: 'Verifikimi dështoi. Provo sërish.',
 
   syncStatusTitle: 'Ruajtja & Sinkronizimi',
   syncStatusConnected: 'Lidhur me cloud',
@@ -611,6 +619,11 @@ const en: Record<keyof typeof sq, string> = {
   authTermsLink: 'Terms of Service',
   authPrivacyLink: 'Privacy Policy',
   authFillFields: 'Please fill in all fields.',
+  authPasswordTooShort: 'Password must be at least 6 characters.',
+  authConfirmLinkSent: 'We sent a confirmation link to',
+  authForgotSending: 'Sending...',
+  authForgotSent: 'Link sent! Check your email.',
+  authForgotEnterEmail: 'Please enter your email first.',
 
   // ── Common actions ───────────────────────────────────────────
   save: 'Save',
@@ -1120,6 +1133,9 @@ const en: Record<keyof typeof sq, string> = {
   biometricLoginBtn: 'Sign in with biometrics',
   biometricPrompt: 'Confirm your identity',
   biometricNotEnrolled: 'No biometrics enrolled. Go to device Settings.',
+  biometricGateSubtitle: 'Confirm your identity to continue',
+  biometricVerifying: 'Verifying...',
+  biometricFailed: 'Verification failed. Try again.',
 
   syncStatusTitle: 'Storage & Sync',
   syncStatusConnected: 'Connected to cloud',

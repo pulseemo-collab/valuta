@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { AppProvider, useStore } from '@/lib/store';
 import { ThemeProvider, useIsLight } from '@/lib/ThemeContext';
+import { useTranslation } from '@/lib/i18n';
 import {
   getBiometricStatus,
   loadBiometricEnabled,
@@ -72,6 +73,7 @@ interface BiometricGateProps {
 }
 
 function BiometricGate({ status, onUnlock }: BiometricGateProps) {
+  const { t } = useTranslation();
   const [authenticating, setAuthenticating] = useState(false);
   const [error, setError] = useState(false);
 
@@ -80,15 +82,15 @@ function BiometricGate({ status, onUnlock }: BiometricGateProps) {
 
   const typeLabel =
     status.type === 'face'
-      ? 'Face ID / Njohje fytyre'
+      ? t('biometricFaceId')
       : status.type === 'iris'
-      ? 'Njohja e irisit'
-      : 'Gjurma e gishtit';
+      ? t('biometricIris')
+      : t('biometricFingerprint');
 
   const handleBiometric = async () => {
     setAuthenticating(true);
     setError(false);
-    const ok = await authenticateAsync('Konfirmo identitetin tënd');
+    const ok = await authenticateAsync(t('biometricPrompt'));
     setAuthenticating(false);
     if (ok) {
       onUnlock();
@@ -115,8 +117,8 @@ function BiometricGate({ status, onUnlock }: BiometricGateProps) {
             <Text style={bioGate.logoLetter}>V</Text>
           </LinearGradient>
 
-          <Text style={bioGate.title}>Mirë se vjen</Text>
-          <Text style={bioGate.subtitle}>Konfirmo identitetin për të vazhduar</Text>
+          <Text style={bioGate.title}>{t('authWelcome')}</Text>
+          <Text style={bioGate.subtitle}>{t('biometricGateSubtitle')}</Text>
 
           <View style={bioGate.iconWrap}>
             <Ionicons name={typeIcon} size={52} color={C.primary} />
@@ -127,7 +129,7 @@ function BiometricGate({ status, onUnlock }: BiometricGateProps) {
           {error && (
             <View style={bioGate.errorBox}>
               <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
-              <Text style={bioGate.errorText}>Verifikimi dështoi. Provo sërish.</Text>
+              <Text style={bioGate.errorText}>{t('biometricFailed')}</Text>
             </View>
           )}
 
@@ -142,7 +144,7 @@ function BiometricGate({ status, onUnlock }: BiometricGateProps) {
                 ? <ActivityIndicator size="small" color="#fff" />
                 : <Ionicons name={typeIcon} size={20} color="#fff" />}
               <Text style={bioGate.btnText}>
-                {authenticating ? 'Duke verifikuar...' : 'Hyr me biometrikë'}
+                {authenticating ? t('biometricVerifying') : t('biometricLoginBtn')}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -272,6 +274,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 function SplashScreen() {
+  const { t } = useTranslation();
   const pulse = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
@@ -331,7 +334,7 @@ function SplashScreen() {
           letterSpacing: 0.3,
         }}
       >
-        Duke u ngarkuar...
+        {t('loading')}
       </Text>
     </View>
   );

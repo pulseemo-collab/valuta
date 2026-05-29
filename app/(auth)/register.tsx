@@ -43,7 +43,7 @@ export default function Register() {
       return;
     }
     if (password.length < 6) {
-      setError(lang === 'en' ? 'Password must be at least 6 characters.' : 'Fjalëkalimi duhet të ketë të paktën 6 karaktere.');
+      setError(t('authPasswordTooShort'));
       return;
     }
 
@@ -84,7 +84,7 @@ export default function Register() {
                   </View>
                   <Text style={styles.successTitle}>{t('authCheckEmail')}</Text>
                   <Text style={styles.successDesc}>
-                    {lang === 'en' ? 'We sent a confirmation link to' : 'Të dërguam një link konfirmimi tek'}{'\n'}
+                    {t('authConfirmLinkSent')}{'\n'}
                     <Text style={styles.successEmail}>{email.trim()}</Text>
                     {'\n\n'}{t('authConfirmSent')}
                   </Text>

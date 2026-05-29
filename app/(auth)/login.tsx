@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { C, GRADIENTS } from '@/constants/colors';
 import { signIn, toAlbanianError } from '@/lib/auth';
-import { supabaseConfigMissing } from '@/lib/supabase';
+import { supabase, supabaseConfigMissing } from '@/lib/supabase';
 import { useTranslation } from '@/lib/i18n';
 
 export default function Login() {
@@ -30,12 +30,32 @@ export default function Login() {
       ? 'Konfigurimi i Supabase mungon në build-in Android.'
       : ''
   );
+  const [resetSent, setResetSent] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   const router = useRouter();
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError(t('authForgotEnterEmail'));
+      return;
+    }
+    setSendingReset(true);
+    setError('');
+    try {
+      await supabase.auth.resetPasswordForEmail(email.trim());
+      setResetSent(true);
+    } catch {
+      setError(t('authForgotEnterEmail'));
+    } finally {
+      setSendingReset(false);
+    }
+  };
 
   const handleLogin = async () => {
     setError('');
+    setResetSent(false);
     if (!email.trim() || !password) {
-      setError('Ju lutem plotësoni të gjitha fushat.');
+      setError(t('authFillFields'));
       return;
     }
 
@@ -120,8 +140,21 @@ export default function Login() {
                     </View>
                   ) : null}
 
-                  <TouchableOpacity style={styles.forgotBtn}>
-                    <Text style={styles.forgotText}>{t('authForgotPwQ')}</Text>
+                  {resetSent ? (
+                    <View style={styles.resetSentBox}>
+                      <Ionicons name="checkmark-circle-outline" size={15} color={C.primary} />
+                      <Text style={styles.resetSentText}>{t('authForgotSent')}</Text>
+                    </View>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={styles.forgotBtn}
+                    onPress={handleForgotPassword}
+                    disabled={sendingReset}
+                  >
+                    <Text style={styles.forgotText}>
+                      {sendingReset ? t('authForgotSending') : t('authForgotPwQ')}
+                    </Text>
                   </TouchableOpacity>
 
                   <Button onPress={handleLogin} size="lg" fullWidth loading={loading}>
@@ -221,6 +254,17 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   errorText: { flex: 1, fontSize: 13, color: C.danger, lineHeight: 18 },
+  resetSentBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: C.primaryBgSubtle,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.primaryBorder,
+    padding: 12,
+  },
+  resetSentText: { flex: 1, fontSize: 13, color: C.primary, lineHeight: 18 },
   forgotBtn: { alignSelf: 'flex-end', marginTop: -8 },
   forgotText: { fontSize: 13, color: C.primary, fontWeight: '500' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 12 },
