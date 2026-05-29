@@ -1,11 +1,20 @@
 import '../global.css';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, View, Text, ActivityIndicator, Animated } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Platform, View, Text, ActivityIndicator, Animated, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { AppProvider, useStore } from '@/lib/store';
 import { ThemeProvider, useIsLight } from '@/lib/ThemeContext';
+import {
+  getBiometricStatus,
+  loadBiometricEnabled,
+  authenticateAsync,
+  type BiometricStatus,
+} from '@/lib/biometricAuth';
+import { C, GRADIENTS } from '@/constants/colors';
 
 // URL polyfill is only needed on native — web already has a native URL API
 // and loading it during Expo Router SSR crashes with "window is not defined"
@@ -55,10 +64,148 @@ function ThemedStatusBar() {
   return <StatusBar style={isLight ? 'dark' : 'light'} backgroundColor={isLight ? '#F8FAFC' : '#060B18'} />;
 }
 
+// ── Biometric gate ────────────────────────────────────────────────────────────
+
+interface BiometricGateProps {
+  status: BiometricStatus;
+  onUnlock: () => void;
+}
+
+function BiometricGate({ status, onUnlock }: BiometricGateProps) {
+  const [authenticating, setAuthenticating] = useState(false);
+  const [error, setError] = useState(false);
+
+  const typeIcon: keyof typeof Ionicons.glyphMap =
+    status.type === 'face' ? 'scan-outline' : 'finger-print-outline';
+
+  const typeLabel =
+    status.type === 'face'
+      ? 'Face ID / Njohje fytyre'
+      : status.type === 'iris'
+      ? 'Njohja e irisit'
+      : 'Gjurma e gishtit';
+
+  const handleBiometric = async () => {
+    setAuthenticating(true);
+    setError(false);
+    const ok = await authenticateAsync('Konfirmo identitetin tënd');
+    setAuthenticating(false);
+    if (ok) {
+      onUnlock();
+    } else {
+      setError(true);
+    }
+  };
+
+  // Auto-trigger on mount
+  useEffect(() => {
+    handleBiometric();
+  }, []);
+
+  return (
+    <LinearGradient colors={GRADIENTS.hero} style={bioGate.root}>
+      <SafeAreaView style={bioGate.safe} edges={['top', 'bottom']}>
+        <View style={bioGate.inner}>
+          <LinearGradient
+            colors={GRADIENTS.emeraldBlue}
+            style={bioGate.logoBox}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Text style={bioGate.logoLetter}>V</Text>
+          </LinearGradient>
+
+          <Text style={bioGate.title}>Mirë se vjen</Text>
+          <Text style={bioGate.subtitle}>Konfirmo identitetin për të vazhduar</Text>
+
+          <View style={bioGate.iconWrap}>
+            <Ionicons name={typeIcon} size={52} color={C.primary} />
+          </View>
+
+          <Text style={bioGate.typeLabel}>{typeLabel}</Text>
+
+          {error && (
+            <View style={bioGate.errorBox}>
+              <Ionicons name="alert-circle-outline" size={15} color={C.danger} />
+              <Text style={bioGate.errorText}>Verifikimi dështoi. Provo sërish.</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[bioGate.btn, authenticating && { opacity: 0.65 }]}
+            onPress={handleBiometric}
+            activeOpacity={0.8}
+            disabled={authenticating}
+          >
+            <LinearGradient colors={GRADIENTS.primary} style={bioGate.btnGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              {authenticating
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name={typeIcon} size={20} color="#fff" />}
+              <Text style={bioGate.btnText}>
+                {authenticating ? 'Duke verifikuar...' : 'Hyr me biometrikë'}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </LinearGradient>
+  );
+}
+
+const bioGate = StyleSheet.create({
+  root: { flex: 1 },
+  safe: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  inner: { width: '100%', maxWidth: 340, paddingHorizontal: 28, alignItems: 'center', gap: 16 },
+  logoBox: {
+    width: 64, height: 64, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+    shadowColor: C.primary, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45, shadowRadius: 14, elevation: 8,
+  },
+  logoLetter: { fontSize: 32, fontWeight: '800', color: '#fff' },
+  title: { fontSize: 26, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: C.textSub, textAlign: 'center' },
+  iconWrap: {
+    width: 100, height: 100, borderRadius: 30,
+    backgroundColor: C.primaryBg, borderWidth: 1.5, borderColor: C.primaryBorder,
+    justifyContent: 'center', alignItems: 'center', marginVertical: 8,
+  },
+  typeLabel: { fontSize: 15, fontWeight: '600', color: C.textSub },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.dangerBgSubtle, borderRadius: 10,
+    borderWidth: 1, borderColor: C.dangerBorder, padding: 12,
+    width: '100%',
+  },
+  errorText: { flex: 1, fontSize: 13, color: C.danger, lineHeight: 18 },
+  btn: { width: '100%', borderRadius: 16, overflow: 'hidden', marginTop: 8 },
+  btnGradient: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 16,
+  },
+  btnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+});
+
+// ── Auth Guard ────────────────────────────────────────────────────────────────
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { state } = useStore();
   const segments = useSegments();
   const router = useRouter();
+
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioStatus, setBioStatus] = useState<BiometricStatus | null>(null);
+  const [bioUnlocked, setBioUnlocked] = useState(false);
+  const bioChecked = useRef(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || bioChecked.current) return;
+    bioChecked.current = true;
+    Promise.all([loadBiometricEnabled(), getBiometricStatus()]).then(([enabled, status]) => {
+      setBioEnabled(enabled);
+      setBioStatus(status);
+    });
+  }, []);
 
   useEffect(() => {
     if (!state.authInitialized) return;
@@ -101,7 +248,27 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return <SplashScreen />;
   }
 
-  return <>{children}</>;
+  // Biometric gate: show when logged in, biometric enabled, hardware available, and not yet unlocked
+  const needsBioGate =
+    Platform.OS !== 'web' &&
+    state.isLoggedIn &&
+    state.modeSelected &&
+    bioEnabled &&
+    !bioUnlocked &&
+    bioStatus !== null &&
+    bioStatus.hasHardware &&
+    bioStatus.isEnrolled;
+
+  return (
+    <>
+      {children}
+      {needsBioGate && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}>
+          <BiometricGate status={bioStatus!} onUnlock={() => setBioUnlocked(true)} />
+        </View>
+      )}
+    </>
+  );
 }
 
 function SplashScreen() {

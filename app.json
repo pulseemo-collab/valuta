@@ -20,7 +20,8 @@
       "bundleIdentifier": "al.valuta.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Valuta ka nevojë për kamerën për të skanuar faturat.",
-        "NSPhotoLibraryUsageDescription": "Valuta ka nevojë për galerinë për të ngarkuar faturat."
+        "NSPhotoLibraryUsageDescription": "Valuta ka nevojë për galerinë për të ngarkuar faturat.",
+        "NSFaceIDUsageDescription": "Valuta përdor Face ID për të siguruar hyrjen në llogarinë tuaj."
       }
     },
     "android": {
@@ -34,7 +35,9 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ]
     },
     "web": {

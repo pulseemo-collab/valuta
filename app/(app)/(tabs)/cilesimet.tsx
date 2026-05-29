@@ -12,6 +12,13 @@ import {
   Pressable,
   TextInput,
 } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
+import {
+  getBiometricStatus,
+  loadBiometricEnabled,
+  saveBiometricEnabled,
+  type BiometricStatus,
+} from '@/lib/biometricAuth';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -590,6 +597,18 @@ export default function Cilesimet() {
   const [resetSent, setResetSent] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // ── Biometric state ───────────────────────────────────────
+  const [bioStatus, setBioStatus] = useState<BiometricStatus | null>(null);
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioDiag, setBioDiag] = useState<{
+    platform: string;
+    hasHardware: string;
+    isEnrolled: string;
+    types: string;
+    securityLevel: string;
+    error: string | null;
+  } | null>(null);
+
   // ── Sync state ────────────────────────────────────────────
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
@@ -628,6 +647,69 @@ export default function Cilesimet() {
       setEmailPrefs((p) => ({ ...p, email: state.userEmail! }));
     }
   }, [showEmailReport]);
+
+  // Load biometric status when Security modal opens
+  useEffect(() => {
+    if (!showSiguria) return;
+    Promise.all([getBiometricStatus(), loadBiometricEnabled()]).then(([status, enabled]) => {
+      setBioStatus(status);
+      setBioEnabled(enabled);
+    });
+
+    setBioDiag(null);
+    (async () => {
+      try {
+        const [hasHardware, isEnrolled, types] = await Promise.all([
+          LocalAuthentication.hasHardwareAsync(),
+          LocalAuthentication.isEnrolledAsync(),
+          LocalAuthentication.supportedAuthenticationTypesAsync(),
+        ]);
+
+        const typeNames: Record<number, string> = {
+          1: 'FINGERPRINT',
+          2: 'FACIAL_RECOGNITION',
+          3: 'IRIS',
+        };
+        const typesStr = types.length > 0
+          ? '[' + types.map((v) => `${typeNames[v] ?? v}`).join(', ') + ']'
+          : '[] (none)';
+
+        let securityLevel = 'N/A';
+        try {
+          const level = await (LocalAuthentication as any).getEnrolledLevelAsync?.();
+          if (level !== undefined) {
+            const levelNames: Record<number, string> = {
+              0: 'NONE',
+              1: 'SECRET',
+              2: 'BIOMETRIC_WEAK',
+              3: 'BIOMETRIC_STRONG',
+            };
+            securityLevel = `${levelNames[level] ?? 'UNKNOWN'} (raw: ${level})`;
+          }
+        } catch (e: any) {
+          securityLevel = `ERROR: ${e?.message ?? String(e)}`;
+        }
+
+        setBioDiag({
+          platform: Platform.OS,
+          hasHardware: String(hasHardware),
+          isEnrolled: String(isEnrolled),
+          types: typesStr,
+          securityLevel,
+          error: null,
+        });
+      } catch (e: any) {
+        setBioDiag({
+          platform: Platform.OS,
+          hasHardware: 'ERROR',
+          isEnrolled: 'ERROR',
+          types: 'ERROR',
+          securityLevel: 'ERROR',
+          error: e?.message ?? String(e),
+        });
+      }
+    })();
+  }, [showSiguria]);
 
   // Track sync completion via state.syncing transitions
   useEffect(() => {
@@ -1532,14 +1614,88 @@ export default function Cilesimet() {
         <View style={styles.legalItem}>
           <Text style={styles.legalItemTitle}>{t('securityBiometricTitle')}</Text>
           <Text style={styles.legalItemBody}>{t('securityBiometricSub')}</Text>
-          <View style={[styles.biometricStatusRow, { marginTop: 8 }]}>
-            <Ionicons
-              name={Platform.OS === 'web' ? 'globe-outline' : 'finger-print-outline'}
-              size={18}
-              color={C.textMuted}
-            />
-            <Text style={styles.biometricStatusText}>{t('securityBiometricStatus')}</Text>
-          </View>
+
+          {Platform.OS === 'web' ? (
+            <View style={[styles.biometricStatusRow, { marginTop: 8 }]}>
+              <Ionicons name="globe-outline" size={18} color={C.textMuted} />
+              <Text style={styles.biometricStatusText}>{t('biometricWebOnly')}</Text>
+            </View>
+          ) : bioStatus === null ? (
+            <View style={[styles.biometricStatusRow, { marginTop: 8 }]}>
+              <ActivityIndicator size="small" color={C.textMuted} />
+            </View>
+          ) : !bioStatus.hasHardware ? (
+            <View style={[styles.biometricStatusRow, { marginTop: 8 }]}>
+              <Ionicons name="finger-print-outline" size={18} color={C.textMuted} />
+              <Text style={styles.biometricStatusText}>{t('biometricUnavailable')}</Text>
+            </View>
+          ) : !bioStatus.isEnrolled ? (
+            <View style={[styles.biometricStatusRow, { marginTop: 8 }]}>
+              <Ionicons name="warning-outline" size={18} color={C.warning} />
+              <Text style={[styles.biometricStatusText, { color: C.warning }]}>{t('biometricNotEnrolled')}</Text>
+            </View>
+          ) : (
+            <View style={{ marginTop: 8, gap: 8 }}>
+              {bioStatus.supportedTypes.map((sType) => (
+                <View key={sType} style={styles.biometricStatusRow}>
+                  <Ionicons
+                    name={sType === 'face' ? 'scan-outline' : sType === 'iris' ? 'eye-outline' : 'finger-print-outline'}
+                    size={18}
+                    color={C.primary}
+                  />
+                  <Text style={[styles.biometricStatusText, { color: C.primary, fontWeight: '600' }]}>
+                    {sType === 'face'
+                      ? t('biometricFaceId')
+                      : sType === 'iris'
+                      ? t('biometricIris')
+                      : t('biometricFingerprint')}
+                  </Text>
+                </View>
+              ))}
+              <View style={[styles.biometricStatusRow, { justifyContent: 'space-between' }]}>
+                <Text style={styles.biometricStatusText}>{t('biometricToggle')}</Text>
+                <Switch
+                  value={bioEnabled}
+                  onValueChange={async (v) => {
+                    setBioEnabled(v);
+                    await saveBiometricEnabled(v);
+                  }}
+                  trackColor={{ false: C.elevated, true: C.primaryBgStrong }}
+                  thumbColor={bioEnabled ? C.primary : C.textMuted}
+                  ios_backgroundColor={C.elevated}
+                />
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* ── Biometric Diagnostics ── */}
+        <View style={styles.legalItem}>
+          <Text style={styles.legalItemTitle}>Biometric Diagnostics</Text>
+          {bioDiag === null ? (
+            <ActivityIndicator size="small" color={C.textMuted} style={{ marginTop: 8 }} />
+          ) : (
+            <View style={{
+              marginTop: 8, padding: 12, borderRadius: 10, gap: 6,
+              backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+            }}>
+              {([
+                ['Platform.OS', bioDiag.platform],
+                ['hasHardwareAsync', bioDiag.hasHardware],
+                ['isEnrolledAsync', bioDiag.isEnrolled],
+                ['supportedTypes', bioDiag.types],
+                ['securityLevel', bioDiag.securityLevel],
+              ] as [string, string][]).map(([label, value]) => (
+                <View key={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: C.textMuted, minWidth: 120 }}>{label}:</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: C.text, flex: 1 }}>{value}</Text>
+                </View>
+              ))}
+              {bioDiag.error !== null && (
+                <Text style={{ fontSize: 11, color: C.danger, marginTop: 4 }}>Error: {bioDiag.error}</Text>
+              )}
+            </View>
+          )}
         </View>
       </InfoModal>
 
