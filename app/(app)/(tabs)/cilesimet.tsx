@@ -1679,6 +1679,7 @@ export default function Cilesimet() {
               marginTop: 8, padding: 12, borderRadius: 10, gap: 6,
               backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
             }}>
+              {/*
               {([
                 ['Platform.OS', bioDiag.platform],
                 ['hasHardwareAsync', bioDiag.hasHardware],
@@ -1694,6 +1695,7 @@ export default function Cilesimet() {
               {bioDiag.error !== null && (
                 <Text style={{ fontSize: 11, color: C.danger, marginTop: 4 }}>Error: {bioDiag.error}</Text>
               )}
+                */}
             </View>
           )}
         </View>
